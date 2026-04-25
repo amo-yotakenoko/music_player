@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../controllers/music_player_controller.dart';
 import '../widgets/mini_player.dart';
 import '../widgets/music_list_body.dart';
+import '../widgets/upside_config.dart';
 
 /// 【表示層（メイン画面）】
 /// 画面の全体構造（Scaffold）のみを定義し、具体的な中身やロジックは他に任せる。
@@ -40,16 +41,7 @@ class _MusicListScreenState extends State<MusicListScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Android Music List'),
-        backgroundColor: Theme.of(context).colorScheme.inversePrimary,
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.refresh),
-            onPressed: _controller.loadFiles,
-          ),
-        ],
-      ),
+      appBar: ConfigSetter(controller: _controller),
       // ボディ部分を分離
       body: MusicListBody(controller: _controller),
       // プレイヤー部分を分離
@@ -59,7 +51,8 @@ class _MusicListScreenState extends State<MusicListScreen> {
         position: _controller.position,
         duration: _controller.duration,
         onPlayPause: _controller.togglePlayPause,
-        onSeek: (value) => _controller.seek(Duration(milliseconds: value.toInt())),
+        onSeek: (value) =>
+            _controller.seek(Duration(milliseconds: value.toInt())),
       ),
     );
   }

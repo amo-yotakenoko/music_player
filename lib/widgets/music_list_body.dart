@@ -24,11 +24,16 @@ class MusicListBody extends StatelessWidget {
       onReorder: controller.reorder,
       itemBuilder: (context, index) {
         final music = controller.musicFiles[index];
-        return MusicTile(
+        return RepaintBoundary(
           key: ValueKey(music.path),
-          music: music,
-          onTap: () => controller.play(music),
-          isPlaying: controller.selectedMusic?.path == music.path && controller.isPlaying,
+          child: MusicTile(
+            key: ValueKey(music.path),
+            music: music,
+            onTap: () => controller.play(music),
+            isPlaying:
+                controller.selectedMusic?.path == music.path &&
+                controller.isPlaying,
+          ),
         );
       },
     );

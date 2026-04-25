@@ -67,15 +67,17 @@ class AudioFileService {
 
   static Future<List<MusicFile>> _listMusicFiles(Directory dir) async {
     final List<MusicFile> files = [];
-    final allowedExtensions = ['.mp3', '.m4a', '.wav'];
 
     await for (FileSystemEntity file in dir.list(
-      recursive: false,
+      recursive: true,
       followLinks: false,
     )) {
-      final path = file.path.toLowerCase();
+      print(file.path);
+
       MusicFile musicFile = MusicFile(file);
-      if (allowedExtensions.any((ext) => path.endsWith(ext))) {
+
+      final path = musicFile.path.toLowerCase();
+      if (['.mp3', '.m4a', '.wav'].any((ext) => path.endsWith(ext))) {
         files.add(musicFile);
       }
     }
