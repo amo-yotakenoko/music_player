@@ -6,12 +6,14 @@ import '../classes/music.dart';
 class MusicTile extends StatelessWidget {
   final MusicFile music;
   final VoidCallback onTap;
+  final VoidCallback onLongPress;
   final bool isPlaying;
 
   const MusicTile({
     super.key,
     required this.music,
     required this.onTap,
+    required this.onLongPress,
     required this.isPlaying,
   });
 
@@ -39,6 +41,7 @@ class MusicTile extends StatelessWidget {
         overflow: TextOverflow.ellipsis,
       ),
       onTap: onTap,
+      onLongPress: onLongPress,
     );
   }
 }

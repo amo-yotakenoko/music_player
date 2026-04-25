@@ -110,4 +110,9 @@ class MusicPlayerController extends ChangeNotifier {
     _musicFiles.insert(newIndex, item);
     notifyListeners();
   }
+
+  void removeMusic(MusicFile music) {
+    musicFiles.remove(music);
+    notifyListeners(); // リストの変更を通知
+  }
 }
