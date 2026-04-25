@@ -2,6 +2,7 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:permission_handler/permission_handler.dart';
+import '../classes/music.dart';
 
 /// 【データ取得層】
 /// 端末内のファイルシステムにアクセスし、音楽ファイルの情報を取得する役割。
@@ -11,20 +12,21 @@ class AudioFileService {
   static Future<bool> requestPermissions() async {
     if (!Platform.isAndroid) return true;
 
-    if (await Permission.audio.isGranted || await Permission.storage.isGranted) {
+    if (await Permission.audio.isGranted ||
+        await Permission.storage.isGranted) {
       return true;
     }
 
     // 両方試みる
     await Permission.storage.request();
     final status = await Permission.audio.request();
-    
+
     return status.isGranted;
   }
 
   /// 音楽ファイルのリストを取得する
   /// 返り値: 取得したファイルエンティティのリスト
-  static Future<List<FileSystemEntity>> loadMusicFiles() async {
+  static Future<List<MusicFile>> loadMusicFiles() async {
     try {
       final hasPermission = await requestPermissions();
       if (!hasPermission) {
@@ -51,9 +53,11 @@ class AudioFileService {
       if (await musicDir.exists()) {
         return musicDir;
       }
-      
+
       // 予備（外部ストレージディレクトリ）
-      final externalDirs = await getExternalStorageDirectories(type: StorageDirectory.music);
+      final externalDirs = await getExternalStorageDirectories(
+        type: StorageDirectory.music,
+      );
       if (externalDirs != null && externalDirs.isNotEmpty) {
         return externalDirs.first;
       }
@@ -61,14 +65,18 @@ class AudioFileService {
     return null;
   }
 
-  static Future<List<FileSystemEntity>> _listMusicFiles(Directory dir) async {
-    final List<FileSystemEntity> files = [];
+  static Future<List<MusicFile>> _listMusicFiles(Directory dir) async {
+    final List<MusicFile> files = [];
     final allowedExtensions = ['.mp3', '.m4a', '.wav'];
 
-    await for (FileSystemEntity file in dir.list(recursive: false, followLinks: false)) {
+    await for (FileSystemEntity file in dir.list(
+      recursive: false,
+      followLinks: false,
+    )) {
       final path = file.path.toLowerCase();
+      MusicFile musicFile = MusicFile(file);
       if (allowedExtensions.any((ext) => path.endsWith(ext))) {
-        files.add(file);
+        files.add(musicFile);
       }
     }
     return files;
