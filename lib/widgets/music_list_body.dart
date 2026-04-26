@@ -21,26 +21,31 @@ class MusicListBody extends StatelessWidget {
       return _buildEmptyView();
     }
 
-    return ReorderableListView.builder(
-      itemCount: controller.musicFiles.length,
-      onReorder: controller.reorder,
-      itemBuilder: (context, index) {
-        final music = controller.musicFiles[index];
-        return RepaintBoundary(
-          key: ValueKey(music.path),
-          child: MusicTile(
+    // リスト全体をRepaintBoundaryで囲み、
+    // itemExtentで高さを固定してレイアウト計算を最適化
+    return RepaintBoundary(
+      child: ListView.builder(
+        itemExtent: 72.0, // ListTileの標準的な高さ
+        itemCount: controller.musicFiles.length,
+        itemBuilder: (context, index) {
+          final music = controller.musicFiles[index];
+          return MusicTile(
             key: ValueKey(music.path),
             music: music,
             onTap: () => controller.play(music),
             onMenuPressed: () {
-              _openItemModal(context, music, controller);
+              _openItemModal(context, index, music, controller);
             },
+            onMoveUp: index > 0 ? () => controller.moveMusicUp(index) : null,
+            onMoveDown: index < controller.musicFiles.length - 1
+                ? () => controller.moveMusicDown(index)
+                : null,
             isPlaying:
                 controller.selectedMusic?.path == music.path &&
                 controller.isPlaying,
-          ),
-        );
-      },
+          );
+        },
+      ),
     );
   }
 
@@ -62,6 +67,7 @@ class MusicListBody extends StatelessWidget {
 
   void _openItemModal(
     BuildContext context,
+    int index,
     MusicFile music,
     MusicPlayerController controller,
   ) {
@@ -73,18 +79,41 @@ class MusicListBody extends StatelessWidget {
       builder: (context) {
         return Container(
           padding: const EdgeInsets.all(20),
-          // ボタンを並べるためにColumnを使います
           child: Column(
-            mainAxisSize: MainAxisSize.min, // 中身の高さに合わせる
+            mainAxisSize: MainAxisSize.min,
             children: [
               Text(
-                "${music.title} を操作", // 曲名を表示
+                "${music.title} を操作",
                 style: const TextStyle(
                   fontWeight: FontWeight.bold,
                   fontSize: 18,
                 ),
               ),
               const SizedBox(height: 20),
+
+              // 上に移動
+              if (index > 0)
+                ListTile(
+                  leading: const Icon(Icons.arrow_upward),
+                  title: const Text("上に移動"),
+                  onTap: () {
+                    controller.moveMusicUp(index);
+                    Navigator.pop(context);
+                  },
+                ),
+
+              // 下に移動
+              if (index < controller.musicFiles.length - 1)
+                ListTile(
+                  leading: const Icon(Icons.arrow_downward),
+                  title: const Text("下に移動"),
+                  onTap: () {
+                    controller.moveMusicDown(index);
+                    Navigator.pop(context);
+                  },
+                ),
+
+              const Divider(),
 
               // 削除ボタン
               ListTile(
@@ -97,13 +126,8 @@ class MusicListBody extends StatelessWidget {
                   ),
                 ),
                 onTap: () {
-                  // 1. コントローラーの削除メソッドを呼ぶ
                   controller.removeMusic(music);
-
-                  // 2. モーダルを閉じる
                   Navigator.pop(context);
-
-                  // (任意) 削除完了を知らせるスナックバーを出す
                   ScaffoldMessenger.of(context).showSnackBar(
                     SnackBar(content: Text("${music.title} を削除しました")),
                   );

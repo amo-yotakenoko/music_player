@@ -33,35 +33,35 @@ class _MusicListScreenState extends State<MusicListScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return ListenableBuilder(
-      listenable: _controller,
-      builder: (context, _) {
-        return Scaffold(
-          appBar: ConfigSetter(controller: _controller),
-          // ボディ部分を分離
-          body: MusicListBody(controller: _controller),
-          // プレイヤー部分を分離
-          bottomNavigationBar: ValueListenableBuilder<Duration>(
-            valueListenable: _controller.durationNotifier,
-            builder: (context, duration, _) {
-              return ValueListenableBuilder<Duration>(
-                valueListenable: _controller.positionNotifier,
-                builder: (context, position, _) {
-                  return MiniPlayer(
-                    songName: _controller.selectedMusic?.title,
-                    isPlaying: _controller.isPlaying,
-                    position: position,
-                    duration: duration,
-                    onPlayPause: _controller.togglePlayPause,
-                    onSeek: (value) =>
-                        _controller.seek(Duration(milliseconds: value.toInt())),
-                  );
-                },
+    return Scaffold(
+      appBar: ConfigSetter(controller: _controller),
+      // ボディ部分だけを監視するように移動
+      body: ListenableBuilder(
+        listenable: _controller,
+        builder: (context, _) {
+          return MusicListBody(controller: _controller);
+        },
+      ),
+      // プレイヤー部分を分離
+      bottomNavigationBar: ValueListenableBuilder<Duration>(
+        valueListenable: _controller.durationNotifier,
+        builder: (context, duration, _) {
+          return ValueListenableBuilder<Duration>(
+            valueListenable: _controller.positionNotifier,
+            builder: (context, position, _) {
+              return MiniPlayer(
+                songName: _controller.selectedMusic?.title,
+                isPlaying: _controller.isPlaying,
+                position: position,
+                duration: duration,
+                onPlayPause: _controller.togglePlayPause,
+                onSeek: (value) =>
+                    _controller.seek(Duration(milliseconds: value.toInt())),
               );
             },
-          ),
-        );
-      },
+          );
+        },
+      ),
     );
   }
 }
