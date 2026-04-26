@@ -121,6 +121,11 @@ class MusicPlayerController extends ChangeNotifier {
     notifyListeners();
   }
 
+  void clearFiles() {
+    _playQueue.clear();
+    notifyListeners();
+  }
+
   Future<void> play(MusicFile music) async {
     _selectedMusic = music;
     notifyListeners();
@@ -140,7 +145,7 @@ class MusicPlayerController extends ChangeNotifier {
     //     .map((x) => x.name)
     //     .toList();
     // print(activeDirNames);
-    final targetDirs = dirIter().take(10).toList();
+    final targetDirs = dirIter().take(100).toList();
     print(targetDirs);
 
     final nowDirs = _playQueue.map((x) => x.directory.split('/').last).toList();
@@ -175,15 +180,14 @@ class MusicPlayerController extends ChangeNotifier {
           if (index != -1) {
             // 2. 見つかった場合、その番地を指定して削除＆取得
             newMusicFile = musicfiles.removeAt(index);
-            musicfiles.add(newMusicFile);
-
             print('削除して取得完了: ${newMusicFile.path}');
           } else {
             print("未再生の物がないので前から持って来る");
-            newMusicFile = _playQueue.firstWhere(
+            final existing = _playQueue.firstWhere(
               (x) => x.directory.split('/').last == dirName,
               orElse: () => MusicFile(File('')),
             );
+            newMusicFile = MusicFile.from(existing);
           }
 
           // 3. 実際のリストに挿入

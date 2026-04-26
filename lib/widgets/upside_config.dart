@@ -24,7 +24,10 @@ class _ConfigSetterState extends State<ConfigSetter> {
       actions: [
         IconButton(
           icon: const Icon(Icons.refresh),
-          onPressed: widget.controller.loadFiles,
+          onPressed: () {
+            widget.controller.clearFiles();
+            widget.controller.SetMusicFiles();
+          },
         ),
         IconButton(
           icon: const Icon(Icons.source),

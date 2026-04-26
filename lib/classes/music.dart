@@ -17,6 +17,13 @@ class MusicFile {
       directory = p.dirname(file.path),
       key = UniqueKey();
 
+  MusicFile.from(MusicFile other)
+    : fileEntry = other.fileEntry,
+      path = other.path,
+      title = other.title,
+      directory = other.directory,
+      key = UniqueKey();
+
   @override
   String toString() {
     // メンバ変数を分かりやすく整形
