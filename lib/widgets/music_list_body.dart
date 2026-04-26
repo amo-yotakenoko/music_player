@@ -91,6 +91,15 @@ class MusicListBody extends StatelessWidget {
               ),
               const SizedBox(height: 20),
 
+              ListTile(
+                leading: const Icon(Icons.play_arrow),
+                title: const Text("次に再生"),
+                onTap: () {
+                  controller.moveMusicNext(index);
+                  Navigator.pop(context);
+                },
+              ),
+
               // 上に移動
               if (index > 0)
                 ListTile(

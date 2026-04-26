@@ -127,6 +127,14 @@ class MusicPlayerController extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// 次の再生に移動
+  void moveMusicNext(int index) {
+    final now = _musicFiles.indexOf(_selectedMusic!);
+    final item = _musicFiles.removeAt(index);
+    _musicFiles.insert(now + 1, item);
+    notifyListeners();
+  }
+
   void removeMusic(MusicFile music) {
     musicFiles.remove(music);
     notifyListeners(); // リストの変更を通知
