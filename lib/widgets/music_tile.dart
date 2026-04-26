@@ -82,7 +82,7 @@ class MusicTile extends StatelessWidget {
         ),
       ),
       subtitle: Text(
-        music.path,
+        music.artist ?? "Unknown Artist",
         style: const TextStyle(fontSize: 10),
         maxLines: 1,
         overflow: TextOverflow.ellipsis,

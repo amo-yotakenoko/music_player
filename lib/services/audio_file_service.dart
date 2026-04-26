@@ -36,7 +36,9 @@ class AudioFileService {
 
       final musicDir = await _getMusicDirectory();
       if (musicDir != null && await musicDir.exists()) {
-        return await _listMusicFiles(musicDir);
+        List<MusicFile> musicFiles = await _listMusicFiles(musicDir);
+        await Future.wait(musicFiles.map((m) => m.loadTags()));
+        return musicFiles;
       } else {
         debugPrint('音楽フォルダが見つかりませんでした: ${musicDir?.path}');
       }

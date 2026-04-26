@@ -5,7 +5,6 @@ import 'package:audioplayers/audioplayers.dart';
 import '../classes/music.dart';
 import '../services/audio_file_service.dart';
 import 'package:flutter_spinbox/flutter_spinbox.dart';
-import 'package:path/path.dart' as p;
 import 'package:diffutil_dart/diffutil.dart' as diffutil;
 
 class ShuffleCoonfig {
@@ -134,91 +133,118 @@ class MusicPlayerController extends ChangeNotifier {
   }
 
   void SetMusicFiles() async {
-    // print(_musicFiles);
-    // if (_selectedMusic == null) return;
-    final now = _selectedMusic == null
-        ? 0
-        : _playQueue.indexOf(_selectedMusic!);
-
-    // final activeDirNames = shuffleConfig.values
-    //     .where((x) => x.frequency > 0)
-    //     .map((x) => x.name)
-    //     .toList();
-    // print(activeDirNames);
+    // 1) 現在の再生キューとターゲットのディレクトリ順を比較して差分を計算
+    // 2) Insert/Remove/Move に沿って queue を更新する
+    // 3) 新規追加が必要な場合、未再生リストから優先的に取得し
+    //    それでも足りない場合は既存キューの再利用を行う
     final targetDirs = dirIter().take(100).toList();
-    print(targetDirs);
-
     final nowDirs = _playQueue.map((x) => x.directory.split('/').last).toList();
-    print(nowDirs);
+    final updates = diffutil.calculateListDiff(nowDirs, targetDirs);
 
-    diffutil.DiffResult<String> updates = diffutil.calculateListDiff(
-      nowDirs,
-      targetDirs,
-    );
-    // print(updates);
-    List<MusicFile> musicfiles = await AudioFileService.loadMusicFiles();
+    print('targetDirs: $targetDirs');
+    print('nowDirs: $nowDirs');
+
+    final musicfiles = await AudioFileService.loadMusicFiles();
+
     musicfiles.shuffle();
+
+    final queue = List<MusicFile>.from(_playQueue);
 
     for (final update in updates.getUpdates()) {
       if (update is diffutil.Insert) {
-        // 挿入処理
-        // update.position: 挿入位置
-        // update.count: 挿入する個数
-        print('${update.position}番目に${update.count}個追加します');
-
-        // 例: 新しいリストから該当範囲を抜き出して挿入
-
+        // insert は targetDirs の順序に従って追加する
         for (int i = 0; i < update.count; i++) {
-          // 1. 追加すべきディレクトリ名を取得
           final dirName = targetDirs[update.position + i];
-
-          // 2. その名前から MusicFile オブジェクト（仮）を生成
           final index = musicfiles.indexWhere(
             (x) => x.directory.split('/').last == dirName,
           );
-          MusicFile newMusicFile;
+
+          late final MusicFile newMusicFile;
           if (index != -1) {
-            // 2. 見つかった場合、その番地を指定して削除＆取得
+            // 未再生リストから取得
             newMusicFile = musicfiles.removeAt(index);
-            print('削除して取得完了: ${newMusicFile.path}');
           } else {
-            print("未再生の物がないので前から持って来る");
-            final existing = _playQueue.firstWhere(
-              (x) => x.directory.split('/').last == dirName,
-              orElse: () => MusicFile(File('')),
-            );
-            newMusicFile = MusicFile.from(existing);
+            // 未再生リストが足りない場合はすでに使ったものを再利用
+            final candidates = queue
+                .where((x) => x.directory.split('/').last == dirName)
+                .toList();
+
+            if (candidates.isNotEmpty) {
+              candidates.shuffle();
+              newMusicFile = MusicFile.from(candidates.first);
+            } else if (musicfiles.isNotEmpty) {
+              // それでも候補がなければ残り未再生リストから補填
+              newMusicFile = musicfiles.removeAt(0);
+            } else if (_playQueue.isNotEmpty) {
+              // それでもダメなら古い再生キューから一つだけ流用
+              final fallback = List.of(_playQueue)..shuffle();
+              newMusicFile = MusicFile.from(fallback.first);
+            } else {
+              // 最後は空ファイルでフォールバック
+              newMusicFile = MusicFile(File(''));
+            }
           }
 
-          // 3. 実際のリストに挿入
-          _playQueue.insert(update.position + i, newMusicFile);
+          queue.insert(update.position + i, newMusicFile);
         }
-
-        // _yourList.insertAll(update.position, itemsToAdd);
       } else if (update is diffutil.Remove) {
-        // 削除処理
-        // update.position: 削除開始位置
-        // update.count: 削除する個数
-        print('${update.position}番目から${update.count}個削除します');
-        _playQueue.removeRange(update.position, update.position + update.count);
-        // _yourList.removeRange(update.position, update.position + update.count);
+        // 不要になった項目を削除
+        queue.removeRange(update.position, update.position + update.count);
       } else if (update is diffutil.Move) {
-        // 移動処理
-        print('${update.from}番目を${update.to}番目へ移動します');
-        _playQueue.insert(update.to, _playQueue.removeAt(update.from));
+        // 順序変更を反映
+        final item = queue.removeAt(update.from);
+        queue.insert(update.to, item);
       }
     }
 
+    _playQueue = queue;
     notifyListeners();
   }
 
   Iterable<String> dirIter() sync* {
+    // 1. 設定から有効な（頻度が1以上の）フォルダだけを抽出
+    final activeConfigs = shuffleConfig.entries
+        .where((e) => e.value.frequency > 0)
+        .toList();
+
+    if (activeConfigs.isEmpty) return;
+
+    // 2. 合計頻度を計算
+    final totalFrequency = activeConfigs.fold<int>(
+      0,
+      (sum, e) => sum + e.value.frequency,
+    );
+
+    // 3. 各フォルダの「出番待ち状態」を管理するカウンター（初期値は0）
+    final Map<String, double> counters = {
+      for (var e in activeConfigs) e.value.name: 0.0,
+    };
+
     while (true) {
-      for (var entry in shuffleConfig.entries) {
-        for (int i = 0; i < entry.value.frequency; i++) {
-          yield entry.value.name;
-        }
+      // 4. 全てのフォルダのカウンターに、それぞれの「出現割合」を加算する
+      for (var entry in activeConfigs) {
+        final name = entry.value.name;
+        final freq = entry.value.frequency;
+        // 頻度を全体で割った値を足していく（例：Aが3、Cが2なら、Aには0.6、Cには0.4ずつ溜まる）
+        counters[name] = counters[name]! + (freq / totalFrequency);
       }
+
+      // 5. カウンターが最大（最も「溜まっている」）フォルダを探す
+      String bestName = activeConfigs.first.value.name;
+      double maxVal = -1.0;
+
+      counters.forEach((name, val) {
+        if (val > maxVal) {
+          maxVal = val;
+          bestName = name;
+        }
+      });
+
+      // 6. 選ばれたフォルダ名を出力（yield）
+      yield bestName;
+
+      // 7. 出力したフォルダのカウンターを 1 減らす
+      counters[bestName] = counters[bestName]! - 1.0;
     }
   }
 
