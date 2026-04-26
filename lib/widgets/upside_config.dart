@@ -43,26 +43,28 @@ class _ConfigSetterState extends State<ConfigSetter> {
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
       builder: (context) {
-        return Container(
-          padding: const EdgeInsets.all(20),
-          child: Column(
-            children: [
-              for (var item in controller.shuffleConfig.entries)
-                item.value.buildSpinBoxRow(),
+        return StatefulBuilder(
+          builder: (context, setModalState) {
+            return Container(
+              padding: const EdgeInsets.all(20),
+              child: Column(
+                children: [
+                  for (var item in controller.shuffleConfig.entries)
+                    item.value.buildSpinBoxRow(() => setModalState(() {})),
 
-              ElevatedButton(
-                onPressed: () {
-                  Navigator.pop(context);
-                },
-                child: const Text('保存'),
+                  ElevatedButton(
+                    onPressed: () {
+                      print("押された");
+                      controller.SetMusicFiles();
+                      Navigator.pop(context);
+                    },
+                    child: const Text('保存'),
+                  ),
+                ],
               ),
-            ],
-          ),
+            );
+          },
         );
-        // Container(
-        //   padding: const EdgeInsets.all(20),
-        //   children: [const Text('外部のボタンから呼ばれました！')],
-        // );
       },
     );
   }

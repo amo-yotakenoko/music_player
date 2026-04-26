@@ -1,27 +1,26 @@
 import 'dart:io';
+import 'package:path/path.dart' as p;
 
 class MusicFile {
   FileSystemEntity fileEntry;
   final String path;
-  final String title;
-  final String directoory;
+  String title;
+  final String directory;
 
   // 初期化リスト（コロンの後ろで代入する）
   MusicFile(FileSystemEntity file)
     : fileEntry = file,
       path = file.path,
-      title = _extractTitle(file),
-      directoory = _extractDirectory(file);
+      title = p.basename(file.path),
+      directory = p.dirname(file.path);
+
+  @override
+  String toString() {
+    // メンバ変数を分かりやすく整形
+    return 'MusicFile(title: $title, directory: $directory)';
+  }
 
   // コンストラクタから呼ぶ関数は static にする必要がある
-  static String _extractTitle(FileSystemEntity file) {
-    return file.path.split('/').last;
-  }
-
-  static String _extractDirectory(FileSystemEntity file) {
-    return file.path
-        .split('/')
-        .sublist(0, file.path.split('/').length - 1)
-        .join('/');
-  }
+  // （p.basename, p.dirname を使うようにしたので不要になりましたが、互換性のために残すか削除します。
+  // 今回は完全に p.Context (pathパッケージ) に任せる形に修正します）
 }

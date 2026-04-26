@@ -5,18 +5,20 @@ import 'package:audioplayers/audioplayers.dart';
 import '../classes/music.dart';
 import '../services/audio_file_service.dart';
 import 'package:flutter_spinbox/flutter_spinbox.dart';
+import 'package:path/path.dart' as p;
+import 'package:diffutil_dart/diffutil.dart' as diffutil;
 
 class ShuffleCoonfig {
   String name;
   int frequency;
-  bool shuffle;
+  bool shuffle = false;
   ShuffleCoonfig({
     required this.name,
     required this.frequency,
-    required this.shuffle,
+    this.shuffle = false,
   });
 
-  Widget buildSpinBoxRow() {
+  Widget buildSpinBoxRow(VoidCallback onUpdate) {
     return Row(
       children: [
         Text(name),
@@ -26,8 +28,20 @@ class ShuffleCoonfig {
             min: 0,
             max: 5,
             value: frequency.toDouble(),
-            onChanged: (value) => frequency = value.toInt(),
+            onChanged: (value) {
+              frequency = value.toInt();
+              onUpdate();
+            },
           ),
+        ),
+        const SizedBox(width: 20),
+        // shuffle用
+        Switch(
+          value: shuffle,
+          onChanged: (value) {
+            shuffle = value;
+            onUpdate();
+          },
         ),
       ],
     );
@@ -35,8 +49,6 @@ class ShuffleCoonfig {
 }
 
 /// 【ロジック・状態管理層】
-/// 再生に関する状態（State）と操作（Method）を一括管理するクラス。
-/// ChangeNotifierを継承することで、状態が変わった時にUIに通知できる。
 class MusicPlayerController extends ChangeNotifier {
   final AudioPlayer _audioPlayer = AudioPlayer();
 
@@ -65,9 +77,10 @@ class MusicPlayerController extends ChangeNotifier {
   StreamSubscription? _compSub;
 
   Map<String, ShuffleCoonfig> shuffleConfig = {
-    'A': ShuffleCoonfig(name: 'A', frequency: 1, shuffle: true),
-    'B': ShuffleCoonfig(name: 'B', frequency: 0, shuffle: false),
-    '配信': ShuffleCoonfig(name: '配信', frequency: 0, shuffle: false),
+    'A': ShuffleCoonfig(name: 'A', frequency: 1),
+    'B': ShuffleCoonfig(name: 'B', frequency: 0),
+    'C': ShuffleCoonfig(name: 'C', frequency: 0),
+    '配信': ShuffleCoonfig(name: '配信', frequency: 0),
   };
 
   MusicPlayerController() {
@@ -100,7 +113,6 @@ class MusicPlayerController extends ChangeNotifier {
 
   // --- 操作（Action） ---
 
-  /// ファイルを読み込む
   Future<void> loadFiles() async {
     _isLoading = true;
     notifyListeners();
@@ -109,7 +121,6 @@ class MusicPlayerController extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// 指定した曲を再生する
   Future<void> play(MusicFile music) async {
     _selectedMusic = music;
     notifyListeners();
@@ -117,7 +128,86 @@ class MusicPlayerController extends ChangeNotifier {
     await _audioPlayer.play(DeviceFileSource(music.path));
   }
 
-  /// 再生・一時停止の切り替え
+  void SetMusicFiles() {
+    // print(_musicFiles);
+    // if (_selectedMusic == null) return;
+    final now = _selectedMusic == null
+        ? 0
+        : _musicFiles.indexOf(_selectedMusic!);
+
+    // final activeDirNames = shuffleConfig.values
+    //     .where((x) => x.frequency > 0)
+    //     .map((x) => x.name)
+    //     .toList();
+    // print(activeDirNames);
+    final targetDirs = dirIter().take(10).toList();
+    print(targetDirs);
+
+    final nowDirs = _musicFiles
+        .map((x) => x.directory.split('/').last)
+        .toList();
+    print(nowDirs);
+
+    diffutil.DiffResult<String> updates = diffutil.calculateListDiff(
+      nowDirs,
+      targetDirs,
+    );
+    // print(updates);
+
+    for (final update in updates.getUpdates()) {
+      if (update is diffutil.Insert) {
+        // 挿入処理
+        // update.position: 挿入位置
+        // update.count: 挿入する個数
+        print('${update.position}番目に${update.count}個追加します');
+
+        // 例: 新しいリストから該当範囲を抜き出して挿入
+
+        for (int i = 0; i < update.count; i++) {
+          // 1. 追加すべきディレクトリ名を取得
+          final dirName = targetDirs[update.position + i];
+
+          // 2. その名前から MusicFile オブジェクト（仮）を生成
+          final newMusicFile = MusicFile(
+            directory: 'path/to/$dirName',
+            // 他の必要なパラメータ
+          );
+
+          // 3. 実際のリストに挿入
+          _musicFiles.insert(update.position + i, newMusicFile);
+        }
+
+        // _yourList.insertAll(update.position, itemsToAdd);
+      } else if (update is diffutil.Remove) {
+        // 削除処理
+        // update.position: 削除開始位置
+        // update.count: 削除する個数
+        print('${update.position}番目から${update.count}個削除します');
+        _musicFiles.removeRange(
+          update.position,
+          update.position + update.count,
+        );
+        // _yourList.removeRange(update.position, update.position + update.count);
+      } else if (update is diffutil.Move) {
+        // 移動処理
+        print('${update.from}番目を${update.to}番目へ移動します');
+        _musicFiles.insert(update.to, _musicFiles.removeAt(update.from));
+      }
+    }
+
+    notifyListeners();
+  }
+
+  Iterable<String> dirIter() sync* {
+    while (true) {
+      for (var entry in shuffleConfig.entries) {
+        for (int i = 0; i < entry.value.frequency; i++) {
+          yield entry.value.name;
+        }
+      }
+    }
+  }
+
   Future<void> togglePlayPause() async {
     if (_isPlaying) {
       await _audioPlayer.pause();
@@ -126,12 +216,10 @@ class MusicPlayerController extends ChangeNotifier {
     }
   }
 
-  /// シーク操作
   Future<void> seek(Duration pos) async {
     await _audioPlayer.seek(pos);
   }
 
-  /// 指定した秒数だけスキップする（正の値で進む、負の値で戻る）
   Future<void> skipSeconds(int seconds) async {
     final currentPos = await _audioPlayer.getCurrentPosition();
     if (currentPos == null) return;
@@ -139,19 +227,13 @@ class MusicPlayerController extends ChangeNotifier {
     await _audioPlayer.seek(newPos);
   }
 
-  /// 次の曲へ
-
   Future<void> timeSkip(int time) async {
-    // 現在の再生位置を取得
-
     final currentPosition =
         await _audioPlayer.getCurrentPosition() ?? Duration.zero;
-    // 指定された時間加算
     final targetPosition = currentPosition + Duration(seconds: time);
     await _audioPlayer.seek(targetPosition);
   }
 
-  /// 次の曲へ
   void playNext() {
     if (_musicFiles.isEmpty || _selectedMusic == null) return;
     final index = _musicFiles.indexOf(_selectedMusic!);
@@ -159,7 +241,6 @@ class MusicPlayerController extends ChangeNotifier {
     play(_musicFiles[nextIndex]);
   }
 
-  /// リストの並び替え
   void reorder(int oldIndex, int newIndex) {
     if (oldIndex < newIndex) newIndex -= 1;
     final item = _musicFiles.removeAt(oldIndex);
@@ -167,7 +248,6 @@ class MusicPlayerController extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// 1つ上に移動
   void moveMusicUp(int index) {
     if (index <= 0) return;
     final item = _musicFiles.removeAt(index);
@@ -175,7 +255,6 @@ class MusicPlayerController extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// 1つ下に移動
   void moveMusicDown(int index) {
     if (index >= _musicFiles.length - 1) return;
     final item = _musicFiles.removeAt(index);
@@ -183,7 +262,6 @@ class MusicPlayerController extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// 次の再生に移動
   void moveMusicNext(int index) {
     final now = _musicFiles.indexOf(_selectedMusic!);
     final item = _musicFiles.removeAt(index);
@@ -192,8 +270,8 @@ class MusicPlayerController extends ChangeNotifier {
   }
 
   void removeMusic(MusicFile music) {
-    musicFiles.remove(music);
-    notifyListeners(); // リストの変更を通知
+    _musicFiles.remove(music);
+    notifyListeners();
   }
 
   Future<void> deleteMusicFile(BuildContext context, MusicFile music) async {
