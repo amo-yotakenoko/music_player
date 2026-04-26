@@ -5,6 +5,7 @@ import 'package:audiotags/audiotags.dart';
 import 'package:audiotags/audiotags.dart' as Audiotags;
 import 'package:ffmpeg_kit_flutter_new/ffmpeg_kit.dart';
 import 'package:ffmpeg_kit_flutter_new/return_code.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 class MusicFile {
   FileSystemEntity fileEntry;
@@ -13,7 +14,7 @@ class MusicFile {
   final String directory;
   String? artist;
   double? meanVolume;
-  double? maxVolume;
+  double? maxVolume; //未使用
 
   double get adjustedVolume {
     if (meanVolume == null) return 0.0;
@@ -56,6 +57,20 @@ class MusicFile {
 
   /// FFmpegのvolumedetectフィルターを使用して音量を検出する
   Future<void> detectVolume() async {
+    if (meanVolume != null) {
+      print("既に音量が検出されているためスキップ: $title -> $meanVolume dB");
+      return;
+    }
+
+    final prefs = await SharedPreferences.getInstance();
+
+    double? storedVolume = prefs.getDouble(title);
+    if (storedVolume != null) {
+      meanVolume = storedVolume;
+      print("CSVから読み込み: $title -> $meanVolume dB");
+      return;
+    }
+
     try {
       // -vn: 映像なし, -sn: 字幕なし, -dn: データなし
       final session = await FFmpegKit.execute(
@@ -85,6 +100,10 @@ class MusicFile {
           }
         }
         print('音量検出完了 ($title): mean: $meanVolume dB, max: $maxVolume dB');
+        if (meanVolume != null) {
+          print("DB保存: $title -> $meanVolume dB");
+          await prefs.setDouble(title, meanVolume!);
+        }
       } else {
         print('音量検出に失敗しました ($title): ${await session.getFailStackTrace()}');
       }

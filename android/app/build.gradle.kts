@@ -15,8 +15,11 @@ android {
         targetCompatibility = JavaVersion.VERSION_17
     }
 
+    // Kotlinのコンパイルオプション設定
     kotlinOptions {
-        jvmTarget = JavaVersion.VERSION_17.toString()
+        // jvmTarget = JavaVersion.VERSION_17.toString() // 以前の書き方（非推奨）
+        @Suppress("DEPRECATION")
+        jvmTarget = "17"
     }
 
     defaultConfig {
@@ -35,6 +38,12 @@ android {
             // TODO: Add your own signing config for the release build.
             // Signing with the debug keys for now, so `flutter run --release` works.
             signingConfig = signingConfigs.getByName("debug")
+
+            // --- リリースモードでの MissingPluginException 対策 ---
+            // リリースビルド時のコード最適化（不要コードの削除）を有効にします
+            isMinifyEnabled = true
+            // 最適化の際に「消してはいけないもの」を指定するルールファイルを読み込みます
+            proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
         }
     }
 }

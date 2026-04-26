@@ -23,7 +23,7 @@ class _MusicListScreenState extends State<MusicListScreen> {
     _controller = MusicPlayerController();
     // 初期データの読み込み
     _controller.loadFiles();
-    _controller.loadValues();
+    // _controller.loadValues();
   }
 
   @override
