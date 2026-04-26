@@ -140,6 +140,13 @@ class MusicPlayerController extends ChangeNotifier {
     notifyListeners();
     await _audioPlayer.stop();
     await _audioPlayer.play(DeviceFileSource(music.path));
+    await music.detectVolume();
+    print(
+      "Applying volume adjustment for ${music.title}: ${music.adjustedVolume}",
+    );
+
+    // 3. プレイヤーに適用（1.0を超えないように制限）
+    await _audioPlayer.setVolume(music.adjustedVolume);
   }
 
   void SetMusicFiles() async {
