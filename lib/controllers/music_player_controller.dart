@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:audioplayers/audioplayers.dart';
 import '../classes/music.dart';
@@ -89,20 +90,21 @@ class MusicPlayerController extends ChangeNotifier {
       await _audioPlayer.resume();
     }
   }
-/// シーク操作
-Future<void> seek(Duration pos) async {
-  await _audioPlayer.seek(pos);
-}
 
-/// 指定した秒数だけスキップする（正の値で進む、負の値で戻る）
-Future<void> skipSeconds(int seconds) async {
-  final currentPos = await _audioPlayer.getCurrentPosition();
-  if (currentPos == null) return;
-  final newPos = currentPos + Duration(seconds: seconds);
-  await _audioPlayer.seek(newPos);
-}
+  /// シーク操作
+  Future<void> seek(Duration pos) async {
+    await _audioPlayer.seek(pos);
+  }
 
-/// 次の曲へ
+  /// 指定した秒数だけスキップする（正の値で進む、負の値で戻る）
+  Future<void> skipSeconds(int seconds) async {
+    final currentPos = await _audioPlayer.getCurrentPosition();
+    if (currentPos == null) return;
+    final newPos = currentPos + Duration(seconds: seconds);
+    await _audioPlayer.seek(newPos);
+  }
+
+  /// 次の曲へ
 
   Future<void> timeSkip(int time) async {
     // 現在の再生位置を取得
@@ -157,5 +159,41 @@ Future<void> skipSeconds(int seconds) async {
   void removeMusic(MusicFile music) {
     musicFiles.remove(music);
     notifyListeners(); // リストの変更を通知
+  }
+
+  Future<void> deleteMusicFile(BuildContext context, MusicFile music) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('ファイルの削除'),
+        content: Text('${music.title} をストレージから完全に削除しますか？'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('キャンセル'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text(
+              '削除',
+              style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold),
+            ),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed == true) {
+      removeMusic(music);
+      final file = File(music.path);
+      if (await file.exists()) {
+        await file.delete();
+      }
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text("${music.title} をストレージから削除しました")),
+        );
+      }
+    }
   }
 }

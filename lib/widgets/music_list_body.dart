@@ -86,74 +86,91 @@ class MusicListBody extends StatelessWidget {
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
-      builder: (context) {
+      builder: (modalContext) {
         return Container(
           padding: const EdgeInsets.all(20),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text(
-                "${music.title} を操作",
-                style: const TextStyle(
-                  fontWeight: FontWeight.bold,
-                  fontSize: 18,
-                ),
-              ),
-              const SizedBox(height: 20),
-
-              // 次に再生
-              ListTile(
-                leading: const Icon(Icons.playlist_add),
-                title: const Text("次に再生"),
-                onTap: () {
-                  controller.moveMusicNext(index);
-                  Navigator.pop(context);
-                },
-              ),
-
-              // 上に移動
-              if (index > 0)
-                ListTile(
-                  leading: const Icon(Icons.arrow_upward),
-                  title: const Text("上に移動"),
-                  onTap: () {
-                    controller.moveMusicUp(index);
-                    Navigator.pop(context);
-                  },
-                ),
-
-              // 下に移動
-              if (index < controller.musicFiles.length - 1)
-                ListTile(
-                  leading: const Icon(Icons.arrow_downward),
-                  title: const Text("下に移動"),
-                  onTap: () {
-                    controller.moveMusicDown(index);
-                    Navigator.pop(context);
-                  },
-                ),
-
-              const Divider(),
-
-              // 削除ボタン
-              ListTile(
-                leading: const Icon(Icons.delete, color: Colors.red),
-                title: const Text(
-                  "再生キューから削除",
-                  style: TextStyle(
-                    color: Colors.red,
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  "${music.title} を操作",
+                  style: const TextStyle(
                     fontWeight: FontWeight.bold,
+                    fontSize: 18,
                   ),
                 ),
-                onTap: () {
-                  controller.removeMusic(music);
-                  Navigator.pop(context);
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(content: Text("${music.title} を削除しました")),
-                  );
-                },
-              ),
-            ],
+                const SizedBox(height: 20),
+
+                // 次に再生
+                ListTile(
+                  leading: const Icon(Icons.playlist_add),
+                  title: const Text("次に再生"),
+                  onTap: () {
+                    controller.moveMusicNext(index);
+                    Navigator.pop(modalContext);
+                  },
+                ),
+
+                // 上に移動
+                if (index > 0)
+                  ListTile(
+                    leading: const Icon(Icons.arrow_upward),
+                    title: const Text("上に移動"),
+                    onTap: () {
+                      controller.moveMusicUp(index);
+                      Navigator.pop(modalContext);
+                    },
+                  ),
+
+                // 下に移動
+                if (index < controller.musicFiles.length - 1)
+                  ListTile(
+                    leading: const Icon(Icons.arrow_downward),
+                    title: const Text("下に移動"),
+                    onTap: () {
+                      controller.moveMusicDown(index);
+                      Navigator.pop(modalContext);
+                    },
+                  ),
+
+                const Divider(),
+
+                // 削除ボタン
+                ListTile(
+                  leading: const Icon(Icons.delete, color: Colors.red),
+                  title: const Text(
+                    "再生キューから削除",
+                    style: TextStyle(
+                      color: Colors.red,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  onTap: () {
+                    controller.removeMusic(music);
+                    Navigator.pop(modalContext);
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(content: Text("${music.title} を削除しました")),
+                    );
+                  },
+                ),
+
+                ListTile(
+                  leading: const Icon(Icons.delete, color: Colors.red),
+                  title: const Text(
+                    "ファイル削除",
+                    style: TextStyle(
+                      color: Colors.red,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  onTap: () {
+                    Navigator.pop(modalContext);
+                    controller.deleteMusicFile(context, music);
+                  },
+                ),
+              ],
+            ),
           ),
         );
       },
