@@ -6,6 +6,7 @@ import '../classes/music.dart';
 import '../services/audio_file_service.dart';
 import 'package:flutter_spinbox/flutter_spinbox.dart';
 import 'package:diffutil_dart/diffutil.dart' as diffutil;
+import '../services/audio_value_service.dart';
 
 class ShuffleCoonfig {
   String name;
@@ -16,6 +17,8 @@ class ShuffleCoonfig {
     required this.frequency,
     this.shuffle = false,
   });
+
+  AudioFileService audioFileService = AudioFileService();
 
   Widget buildSpinBoxRow(VoidCallback onUpdate) {
     return Row(
@@ -118,6 +121,13 @@ class MusicPlayerController extends ChangeNotifier {
     _playQueue = await AudioFileService.loadMusicFiles();
     _isLoading = false;
     notifyListeners();
+  }
+
+  final AudioValueService audioValueService = AudioValueService();
+
+  Future<void> loadValues() async {
+    print("Loading volume values from CSV...");
+    audioValueService.loadVolumeCsv();
   }
 
   void clearFiles() {

@@ -74,7 +74,7 @@ class AudioFileService {
       recursive: true,
       followLinks: false,
     )) {
-      print(file.path);
+      // print(file.path);
 
       MusicFile musicFile = MusicFile(file);
 

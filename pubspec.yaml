@@ -41,6 +41,7 @@ dependencies:
   diffutil_dart: ^4.0.1
   path: ^1.9.1
   audiotags: ^1.4.5
+  csv: ^8.0.0
 
 dev_dependencies:
   flutter_test:
