@@ -4,6 +4,35 @@ import 'package:flutter/material.dart';
 import 'package:audioplayers/audioplayers.dart';
 import '../classes/music.dart';
 import '../services/audio_file_service.dart';
+import 'package:flutter_spinbox/flutter_spinbox.dart';
+
+class ShuffleCoonfig {
+  String name;
+  int frequency;
+  bool shuffle;
+  ShuffleCoonfig({
+    required this.name,
+    required this.frequency,
+    required this.shuffle,
+  });
+
+  Widget buildSpinBoxRow() {
+    return Row(
+      children: [
+        Text(name),
+        const SizedBox(width: 20),
+        Expanded(
+          child: SpinBox(
+            min: 0,
+            max: 5,
+            value: frequency.toDouble(),
+            onChanged: (value) => frequency = value.toInt(),
+          ),
+        ),
+      ],
+    );
+  }
+}
 
 /// 【ロジック・状態管理層】
 /// 再生に関する状態（State）と操作（Method）を一括管理するクラス。
@@ -34,6 +63,12 @@ class MusicPlayerController extends ChangeNotifier {
   StreamSubscription? _durSub;
   StreamSubscription? _stateSub;
   StreamSubscription? _compSub;
+
+  Map<String, ShuffleCoonfig> shuffleConfig = {
+    'A': ShuffleCoonfig(name: 'A', frequency: 1, shuffle: true),
+    'B': ShuffleCoonfig(name: 'B', frequency: 0, shuffle: false),
+    '配信': ShuffleCoonfig(name: '配信', frequency: 0, shuffle: false),
+  };
 
   MusicPlayerController() {
     _init();

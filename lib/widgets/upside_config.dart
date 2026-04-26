@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../controllers/music_player_controller.dart';
+import 'package:flutter_spinbox/flutter_spinbox.dart';
 
 class ConfigSetter extends StatefulWidget implements PreferredSizeWidget {
   const ConfigSetter({super.key, required this.controller});
@@ -28,14 +29,14 @@ class _ConfigSetterState extends State<ConfigSetter> {
         IconButton(
           icon: const Icon(Icons.source),
           onPressed: () {
-            _openModal(context);
+            _openModal(context, widget.controller);
           },
         ),
       ],
     );
   }
 
-  void _openModal(BuildContext context) {
+  void _openModal(BuildContext context, MusicPlayerController controller) {
     showModalBottomSheet(
       context: context,
       shape: const RoundedRectangleBorder(
@@ -44,7 +45,19 @@ class _ConfigSetterState extends State<ConfigSetter> {
       builder: (context) {
         return Container(
           padding: const EdgeInsets.all(20),
-          child: Column(children: [const Text('外部のボタンから呼ばれました！')]),
+          child: Column(
+            children: [
+              for (var item in controller.shuffleConfig.entries)
+                item.value.buildSpinBoxRow(),
+
+              ElevatedButton(
+                onPressed: () {
+                  Navigator.pop(context);
+                },
+                child: const Text('保存'),
+              ),
+            ],
+          ),
         );
         // Container(
         //   padding: const EdgeInsets.all(20),
