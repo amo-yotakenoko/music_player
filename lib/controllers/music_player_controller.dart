@@ -15,16 +15,18 @@ class MusicPlayerController extends ChangeNotifier {
   bool _isLoading = false;
   MusicFile? _selectedMusic;
   bool _isPlaying = false;
-  Duration _position = Duration.zero;
-  Duration _duration = Duration.zero;
+  final ValueNotifier<Duration> _position = ValueNotifier(Duration.zero);
+  final ValueNotifier<Duration> _duration = ValueNotifier(Duration.zero);
 
   // --- 外部公開用のゲッター ---
   List<MusicFile> get musicFiles => _musicFiles;
   bool get isLoading => _isLoading;
   MusicFile? get selectedMusic => _selectedMusic;
   bool get isPlaying => _isPlaying;
-  Duration get position => _position;
-  Duration get duration => _duration;
+  ValueNotifier<Duration> get positionNotifier => _position;
+  ValueNotifier<Duration> get durationNotifier => _duration;
+  Duration get position => _position.value;
+  Duration get duration => _duration.value;
 
   // イベント購読用
   StreamSubscription? _posSub;
@@ -38,12 +40,10 @@ class MusicPlayerController extends ChangeNotifier {
 
   void _init() {
     _posSub = _audioPlayer.onPositionChanged.listen((p) {
-      _position = p;
-      notifyListeners();
+      _position.value = p;
     });
     _durSub = _audioPlayer.onDurationChanged.listen((d) {
-      _duration = d;
-      notifyListeners();
+      _duration.value = d;
     });
     _stateSub = _audioPlayer.onPlayerStateChanged.listen((state) {
       _isPlaying = state == PlayerState.playing;

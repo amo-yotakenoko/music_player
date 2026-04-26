@@ -32,7 +32,7 @@ class MusicListBody extends StatelessWidget {
             key: ValueKey(music.path),
             music: music,
             onTap: () => controller.play(music),
-            onLongPress: () {
+            onMenuPressed: () {
               _openItemModal(context, music, controller);
             },
             isPlaying:

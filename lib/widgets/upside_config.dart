@@ -44,8 +44,12 @@ class _ConfigSetterState extends State<ConfigSetter> {
       builder: (context) {
         return Container(
           padding: const EdgeInsets.all(20),
-          child: const Text('外部のボタンから呼ばれました！'),
+          child: Column(children: [const Text('外部のボタンから呼ばれました！')]),
         );
+        // Container(
+        //   padding: const EdgeInsets.all(20),
+        //   children: [const Text('外部のボタンから呼ばれました！')],
+        // );
       },
     );
   }

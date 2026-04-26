@@ -6,30 +6,30 @@ import '../classes/music.dart';
 class MusicTile extends StatelessWidget {
   final MusicFile music;
   final VoidCallback onTap;
-  final VoidCallback onLongPress;
+  final VoidCallback onMenuPressed;
   final bool isPlaying;
 
   const MusicTile({
     super.key,
     required this.music,
     required this.onTap,
-    required this.onLongPress,
+    required this.onMenuPressed,
     required this.isPlaying,
   });
 
   @override
   Widget build(BuildContext context) {
     return ListTile(
-      leading: Icon(
-        isPlaying ? Icons.play_arrow : Icons.music_note,
+      leading: IconButton(
+        icon: Icon(isPlaying ? Icons.play_circle_filled : Icons.music_note),
         color: isPlaying ? Colors.green : Colors.blue,
+        onPressed: onMenuPressed,
       ),
-      trailing: isPlaying
-          ? const Icon(Icons.equalizer, color: Colors.green)
-          : null,
+
       title: Text(
         music.title,
         style: TextStyle(
+          fontSize: 15,
           fontWeight: isPlaying ? FontWeight.bold : FontWeight.normal,
           color: isPlaying ? Colors.green : null,
         ),
@@ -41,7 +41,6 @@ class MusicTile extends StatelessWidget {
         overflow: TextOverflow.ellipsis,
       ),
       onTap: onTap,
-      onLongPress: onLongPress,
     );
   }
 }
