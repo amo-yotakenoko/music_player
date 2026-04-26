@@ -21,31 +21,41 @@ class MusicListBody extends StatelessWidget {
       return _buildEmptyView();
     }
 
-    // リスト全体をRepaintBoundaryで囲み、
-    // itemExtentで高さを固定してレイアウト計算を最適化
-    return RepaintBoundary(
-      child: ListView.builder(
-        itemExtent: 72.0, // ListTileの標準的な高さ
-        itemCount: controller.musicFiles.length,
-        itemBuilder: (context, index) {
-          final music = controller.musicFiles[index];
-          return MusicTile(
-            key: ValueKey(music.path),
-            music: music,
-            onTap: () => controller.play(music),
-            onMenuPressed: () {
-              _openItemModal(context, index, music, controller);
-            },
-            onMoveUp: index > 0 ? () => controller.moveMusicUp(index) : null,
-            onMoveDown: index < controller.musicFiles.length - 1
-                ? () => controller.moveMusicDown(index)
-                : null,
-            isPlaying:
-                controller.selectedMusic?.path == music.path &&
-                controller.isPlaying,
-          );
-        },
-      ),
+    return ReorderableListView.builder(
+      // ドラッグ中の見た目を最適化（別のレイヤーで描画して軽くする）
+      proxyDecorator: (child, index, animation) {
+        return AnimatedBuilder(
+          animation: animation,
+          builder: (context, _) {
+            return Material(
+              elevation: 4.0,
+              color: Colors.white.withOpacity(0.8),
+              child: child,
+            );
+          },
+        );
+      },
+      itemCount: controller.musicFiles.length,
+      onReorder: controller.reorder,
+      itemBuilder: (context, index) {
+        final music = controller.musicFiles[index];
+        return MusicTile(
+          key: ValueKey(music.path),
+          music: music,
+          onTap: () => controller.play(music),
+          onMenuPressed: () {
+            _openItemModal(context, index, music, controller);
+          },
+          // ドラッグがあるので、ボタンでの移動はオプションとして残す
+          onMoveUp: index > 0 ? () => controller.moveMusicUp(index) : null,
+          onMoveDown: index < controller.musicFiles.length - 1
+              ? () => controller.moveMusicDown(index)
+              : null,
+          isPlaying:
+              controller.selectedMusic?.path == music.path &&
+              controller.isPlaying,
+        );
+      },
     );
   }
 
@@ -91,8 +101,9 @@ class MusicListBody extends StatelessWidget {
               ),
               const SizedBox(height: 20),
 
+              // 次に再生
               ListTile(
-                leading: const Icon(Icons.play_arrow),
+                leading: const Icon(Icons.playlist_add),
                 title: const Text("次に再生"),
                 onTap: () {
                   controller.moveMusicNext(index);
@@ -128,7 +139,7 @@ class MusicListBody extends StatelessWidget {
               ListTile(
                 leading: const Icon(Icons.delete, color: Colors.red),
                 title: const Text(
-                  "リストから削除",
+                  "再生キューから削除",
                   style: TextStyle(
                     color: Colors.red,
                     fontWeight: FontWeight.bold,

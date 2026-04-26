@@ -42,6 +42,7 @@ class _MusicListScreenState extends State<MusicListScreen> {
           return MusicListBody(controller: _controller);
         },
       ),
+
       // プレイヤー部分を分離
       bottomNavigationBar: ValueListenableBuilder<Duration>(
         valueListenable: _controller.durationNotifier,
@@ -49,15 +50,7 @@ class _MusicListScreenState extends State<MusicListScreen> {
           return ValueListenableBuilder<Duration>(
             valueListenable: _controller.positionNotifier,
             builder: (context, position, _) {
-              return MiniPlayer(
-                songName: _controller.selectedMusic?.title,
-                isPlaying: _controller.isPlaying,
-                position: position,
-                duration: duration,
-                onPlayPause: _controller.togglePlayPause,
-                onSeek: (value) =>
-                    _controller.seek(Duration(milliseconds: value.toInt())),
-              );
+              return MiniPlayer(controller: _controller);
             },
           );
         },

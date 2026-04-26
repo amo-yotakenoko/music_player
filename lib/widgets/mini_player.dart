@@ -1,29 +1,16 @@
 import 'package:flutter/material.dart';
+import '../controllers/music_player_controller.dart';
 
 /// 【表示部品層（プレイヤー）】
-/// 親から渡されたデータを表示し、操作イベントを親に通知する役割。
-/// 再生バー（Slider）を追加し、再生位置と曲の長さを表示するように拡張。
+/// コントローラーの状態を監視し、再生バーと操作ボタンを表示する。
 class MiniPlayer extends StatelessWidget {
-  final String? songName;
-  final bool isPlaying;
-  final Duration position;
-  final Duration duration;
-  final VoidCallback? onPlayPause;
-  final ValueChanged<double>? onSeek;
+  final MusicPlayerController controller;
 
-  const MiniPlayer({
-    super.key,
-    this.songName,
-    this.isPlaying = false,
-    this.position = Duration.zero,
-    this.duration = Duration.zero,
-    this.onPlayPause,
-    this.onSeek,
-  });
+  const MiniPlayer({super.key, required this.controller});
 
   @override
   Widget build(BuildContext context) {
-    if (songName == null) return const SizedBox.shrink();
+    if (controller.selectedMusic == null) return const SizedBox.shrink();
 
     return Container(
       decoration: BoxDecoration(
@@ -41,60 +28,102 @@ class MiniPlayer extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            // 再生バー (Slider)
-            SliderTheme(
-              data: SliderTheme.of(context).copyWith(
-                thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 6),
-                overlayShape: const RoundSliderOverlayShape(overlayRadius: 14),
-                trackHeight: 2,
-              ),
-              child: Slider(
-                value: position.inMilliseconds
-                    .clamp(0.0, duration.inMilliseconds)
-                    .toDouble(),
-                max: duration.inMilliseconds.toDouble() > 0
-                    ? duration.inMilliseconds.toDouble()
-                    : 1.0,
-                onChanged: (value) {
-                  if (onSeek != null) onSeek!(value);
-                },
-              ),
+            // 再生バー (Slider) - 頻繁に更新されるためValueListenableBuilderを使用
+            ValueListenableBuilder<Duration>(
+              valueListenable: controller.durationNotifier,
+              builder: (context, duration, _) {
+                return ValueListenableBuilder<Duration>(
+                  valueListenable: controller.positionNotifier,
+                  builder: (context, position, _) {
+                    return SliderTheme(
+                      data: SliderTheme.of(context).copyWith(
+                        thumbShape: const RoundSliderThumbShape(
+                          enabledThumbRadius: 6,
+                        ),
+                        overlayShape: const RoundSliderOverlayShape(
+                          overlayRadius: 14,
+                        ),
+                        trackHeight: 2,
+                      ),
+                      child: Slider(
+                        value: position.inMilliseconds
+                            .clamp(0.0, duration.inMilliseconds)
+                            .toDouble(),
+                        max: duration.inMilliseconds.toDouble() > 0
+                            ? duration.inMilliseconds.toDouble()
+                            : 1.0,
+                        onChanged: (value) {
+                          controller.seek(
+                            Duration(milliseconds: value.toInt()),
+                          );
+                        },
+                      ),
+                    );
+                  },
+                );
+              },
             ),
             // 再生情報の表示
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
               child: Row(
                 children: [
-                  const Icon(Icons.music_note, color: Colors.blue),
-                  const SizedBox(width: 12),
                   Expanded(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          songName!,
+                          controller.selectedMusic!.title,
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                           style: const TextStyle(fontWeight: FontWeight.bold),
                         ),
-                        Text(
-                          '${_formatDuration(position)} / ${_formatDuration(duration)}',
-                          style: TextStyle(
-                            fontSize: 12,
-                            color: Colors.grey[700],
-                          ),
+                        // 時間表示も監視
+                        ValueListenableBuilder<Duration>(
+                          valueListenable: controller.durationNotifier,
+                          builder: (context, duration, _) {
+                            return ValueListenableBuilder<Duration>(
+                              valueListenable: controller.positionNotifier,
+                              builder: (context, position, _) {
+                                return Text(
+                                  '${_formatDuration(position)} / ${_formatDuration(duration)}',
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    color: Colors.grey[700],
+                                  ),
+                                );
+                              },
+                            );
+                          },
                         ),
                       ],
                     ),
                   ),
+
                   IconButton(
                     icon: Icon(
-                      isPlaying
+                      Icons.keyboard_arrow_left,
+                      color: Colors.orange[700],
+                    ),
+                    iconSize: 40,
+                    onPressed: () => controller.timeSkip(-5),
+                  ),
+                  IconButton(
+                    icon: Icon(
+                      controller.isPlaying
                           ? Icons.pause_circle_filled
                           : Icons.play_circle_filled,
                     ),
                     iconSize: 40,
-                    onPressed: onPlayPause,
+                    onPressed: controller.togglePlayPause,
+                  ),
+                  IconButton(
+                    icon: Icon(
+                      Icons.keyboard_arrow_right,
+                      color: Colors.orange[700],
+                    ),
+                    iconSize: 40,
+                    onPressed: () => controller.timeSkip(5),
                   ),
                 ],
               ),

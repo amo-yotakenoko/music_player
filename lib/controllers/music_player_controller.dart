@@ -89,10 +89,29 @@ class MusicPlayerController extends ChangeNotifier {
       await _audioPlayer.resume();
     }
   }
+/// シーク操作
+Future<void> seek(Duration pos) async {
+  await _audioPlayer.seek(pos);
+}
 
-  /// シーク操作
-  Future<void> seek(Duration pos) async {
-    await _audioPlayer.seek(pos);
+/// 指定した秒数だけスキップする（正の値で進む、負の値で戻る）
+Future<void> skipSeconds(int seconds) async {
+  final currentPos = await _audioPlayer.getCurrentPosition();
+  if (currentPos == null) return;
+  final newPos = currentPos + Duration(seconds: seconds);
+  await _audioPlayer.seek(newPos);
+}
+
+/// 次の曲へ
+
+  Future<void> timeSkip(int time) async {
+    // 現在の再生位置を取得
+
+    final currentPosition =
+        await _audioPlayer.getCurrentPosition() ?? Duration.zero;
+    // 指定された時間加算
+    final targetPosition = currentPosition + Duration(seconds: time);
+    await _audioPlayer.seek(targetPosition);
   }
 
   /// 次の曲へ
