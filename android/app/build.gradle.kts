@@ -40,8 +40,13 @@ android {
             signingConfig = signingConfigs.getByName("debug")
 
             // --- リリースモードでの MissingPluginException 対策 ---
-            // リリースビルド時のコード最適化（不要コードの削除）を有効にします
-            isMinifyEnabled = true
+            // ProGuard設定でも解消しないため、一旦最適化（コードの削除）を無効化（false）にします。
+            isMinifyEnabled = false
+            
+            // リソースの削減（isShrinkResources）は、コードの最適化（isMinifyEnabled）が有効な場合のみ使用できます。
+            // コード最適化を無効にしたため、リソース削減も明示的に無効にします。
+            isShrinkResources = false
+            
             // 最適化の際に「消してはいけないもの」を指定するルールファイルを読み込みます
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
         }
