@@ -40,7 +40,7 @@ class MusicListBody extends StatelessWidget {
       itemBuilder: (context, index) {
         final music = controller.musicFiles[index];
         return MusicTile(
-          key: ValueKey(music.path),
+          key: music.key,
           music: music,
           onTap: () => controller.play(music),
           onMenuPressed: () {

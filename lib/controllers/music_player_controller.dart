@@ -53,7 +53,7 @@ class MusicPlayerController extends ChangeNotifier {
   final AudioPlayer _audioPlayer = AudioPlayer();
 
   // --- 状態（State） ---
-  List<MusicFile> _musicFiles = [];
+  List<MusicFile> _playQueue = [];
   bool _isLoading = false;
   MusicFile? _selectedMusic;
   bool _isPlaying = false;
@@ -61,7 +61,7 @@ class MusicPlayerController extends ChangeNotifier {
   final ValueNotifier<Duration> _duration = ValueNotifier(Duration.zero);
 
   // --- 外部公開用のゲッター ---
-  List<MusicFile> get musicFiles => _musicFiles;
+  List<MusicFile> get musicFiles => _playQueue;
   bool get isLoading => _isLoading;
   MusicFile? get selectedMusic => _selectedMusic;
   bool get isPlaying => _isPlaying;
@@ -116,7 +116,7 @@ class MusicPlayerController extends ChangeNotifier {
   Future<void> loadFiles() async {
     _isLoading = true;
     notifyListeners();
-    _musicFiles = await AudioFileService.loadMusicFiles();
+    _playQueue = await AudioFileService.loadMusicFiles();
     _isLoading = false;
     notifyListeners();
   }
@@ -128,12 +128,12 @@ class MusicPlayerController extends ChangeNotifier {
     await _audioPlayer.play(DeviceFileSource(music.path));
   }
 
-  void SetMusicFiles() {
+  void SetMusicFiles() async {
     // print(_musicFiles);
     // if (_selectedMusic == null) return;
     final now = _selectedMusic == null
         ? 0
-        : _musicFiles.indexOf(_selectedMusic!);
+        : _playQueue.indexOf(_selectedMusic!);
 
     // final activeDirNames = shuffleConfig.values
     //     .where((x) => x.frequency > 0)
@@ -143,9 +143,7 @@ class MusicPlayerController extends ChangeNotifier {
     final targetDirs = dirIter().take(10).toList();
     print(targetDirs);
 
-    final nowDirs = _musicFiles
-        .map((x) => x.directory.split('/').last)
-        .toList();
+    final nowDirs = _playQueue.map((x) => x.directory.split('/').last).toList();
     print(nowDirs);
 
     diffutil.DiffResult<String> updates = diffutil.calculateListDiff(
@@ -153,6 +151,8 @@ class MusicPlayerController extends ChangeNotifier {
       targetDirs,
     );
     // print(updates);
+    List<MusicFile> musicfiles = await AudioFileService.loadMusicFiles();
+    musicfiles.shuffle();
 
     for (final update in updates.getUpdates()) {
       if (update is diffutil.Insert) {
@@ -168,13 +168,26 @@ class MusicPlayerController extends ChangeNotifier {
           final dirName = targetDirs[update.position + i];
 
           // 2. その名前から MusicFile オブジェクト（仮）を生成
-          final newMusicFile = MusicFile(
-            directory: 'path/to/$dirName',
-            // 他の必要なパラメータ
+          final index = musicfiles.indexWhere(
+            (x) => x.directory.split('/').last == dirName,
           );
+          MusicFile newMusicFile;
+          if (index != -1) {
+            // 2. 見つかった場合、その番地を指定して削除＆取得
+            newMusicFile = musicfiles.removeAt(index);
+            musicfiles.add(newMusicFile);
+
+            print('削除して取得完了: ${newMusicFile.path}');
+          } else {
+            print("未再生の物がないので前から持って来る");
+            newMusicFile = _playQueue.firstWhere(
+              (x) => x.directory.split('/').last == dirName,
+              orElse: () => MusicFile(File('')),
+            );
+          }
 
           // 3. 実際のリストに挿入
-          _musicFiles.insert(update.position + i, newMusicFile);
+          _playQueue.insert(update.position + i, newMusicFile);
         }
 
         // _yourList.insertAll(update.position, itemsToAdd);
@@ -183,15 +196,12 @@ class MusicPlayerController extends ChangeNotifier {
         // update.position: 削除開始位置
         // update.count: 削除する個数
         print('${update.position}番目から${update.count}個削除します');
-        _musicFiles.removeRange(
-          update.position,
-          update.position + update.count,
-        );
+        _playQueue.removeRange(update.position, update.position + update.count);
         // _yourList.removeRange(update.position, update.position + update.count);
       } else if (update is diffutil.Move) {
         // 移動処理
         print('${update.from}番目を${update.to}番目へ移動します');
-        _musicFiles.insert(update.to, _musicFiles.removeAt(update.from));
+        _playQueue.insert(update.to, _playQueue.removeAt(update.from));
       }
     }
 
@@ -235,42 +245,42 @@ class MusicPlayerController extends ChangeNotifier {
   }
 
   void playNext() {
-    if (_musicFiles.isEmpty || _selectedMusic == null) return;
-    final index = _musicFiles.indexOf(_selectedMusic!);
-    final nextIndex = (index + 1) % _musicFiles.length;
-    play(_musicFiles[nextIndex]);
+    if (_playQueue.isEmpty || _selectedMusic == null) return;
+    final index = _playQueue.indexOf(_selectedMusic!);
+    final nextIndex = (index + 1) % _playQueue.length;
+    play(_playQueue[nextIndex]);
   }
 
   void reorder(int oldIndex, int newIndex) {
     if (oldIndex < newIndex) newIndex -= 1;
-    final item = _musicFiles.removeAt(oldIndex);
-    _musicFiles.insert(newIndex, item);
+    final item = _playQueue.removeAt(oldIndex);
+    _playQueue.insert(newIndex, item);
     notifyListeners();
   }
 
   void moveMusicUp(int index) {
     if (index <= 0) return;
-    final item = _musicFiles.removeAt(index);
-    _musicFiles.insert(index - 1, item);
+    final item = _playQueue.removeAt(index);
+    _playQueue.insert(index - 1, item);
     notifyListeners();
   }
 
   void moveMusicDown(int index) {
-    if (index >= _musicFiles.length - 1) return;
-    final item = _musicFiles.removeAt(index);
-    _musicFiles.insert(index + 1, item);
+    if (index >= _playQueue.length - 1) return;
+    final item = _playQueue.removeAt(index);
+    _playQueue.insert(index + 1, item);
     notifyListeners();
   }
 
   void moveMusicNext(int index) {
-    final now = _musicFiles.indexOf(_selectedMusic!);
-    final item = _musicFiles.removeAt(index);
-    _musicFiles.insert(now + 1, item);
+    final now = _playQueue.indexOf(_selectedMusic!);
+    final item = _playQueue.removeAt(index);
+    _playQueue.insert(now + 1, item);
     notifyListeners();
   }
 
   void removeMusic(MusicFile music) {
-    _musicFiles.remove(music);
+    _playQueue.remove(music);
     notifyListeners();
   }
 
