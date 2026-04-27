@@ -74,13 +74,13 @@ class AudioFileService {
       recursive: true,
       followLinks: false,
     )) {
-      // print(file.path);
-
-      MusicFile musicFile = MusicFile(file);
-
-      final path = musicFile.path.toLowerCase();
-      if (['.mp3', '.m4a', '.wav'].any((ext) => path.endsWith(ext))) {
-        files.add(musicFile);
+      if (file is File) {
+        final path = file.path.toLowerCase();
+        if (['.mp3', '.m4a', '.wav'].any((ext) => path.endsWith(ext))) {
+          MusicFile musicFile = MusicFile(file);
+          musicFile.modified = await file.lastModified();
+          files.add(musicFile);
+        }
       }
     }
     return files;

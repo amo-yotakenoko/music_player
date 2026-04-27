@@ -15,6 +15,7 @@ class MusicFile {
   String? artist;
   double? meanVolume;
   double? maxVolume; //未使用
+  DateTime? modified;
 
   double get adjustedVolume {
     if (meanVolume == null) return 0.0;

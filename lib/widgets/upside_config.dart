@@ -62,20 +62,52 @@ class _ConfigSetterState extends State<ConfigSetter> {
           builder: (context, setModalState) {
             return Container(
               padding: const EdgeInsets.all(20),
-              child: Column(
-                children: [
-                  for (var item in controller.shuffleConfig.entries)
-                    item.value.buildSpinBoxRow(() => setModalState(() {})),
-
-                  ElevatedButton(
-                    onPressed: () {
-                      print("押された");
-                      controller.setMusicFiles();
-                      Navigator.pop(context);
-                    },
-                    child: const Text('保存'),
-                  ),
-                ],
+              child: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    ListTile(
+                      title: const Text('開始日フィルタ'),
+                      subtitle: Text(
+                          controller.filterDate?.toString().split(' ')[0] ??
+                              'なし (全件)'),
+                      trailing: const Icon(Icons.calendar_today),
+                      onTap: () async {
+                        final picked = await showDatePicker(
+                          context: context,
+                          initialDate: controller.filterDate ?? DateTime.now(),
+                          firstDate: DateTime(2000),
+                          lastDate: DateTime.now(),
+                        );
+                        if (picked != null) {
+                          setModalState(() {
+                            controller.filterDate = picked;
+                          });
+                        }
+                      },
+                      onLongPress: () {
+                        setModalState(() {
+                          controller.filterDate = null;
+                        });
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(content: Text('フィルタを解除しました')),
+                        );
+                      },
+                    ),
+                    const Divider(),
+                    for (var item in controller.shuffleConfig.entries)
+                      item.value.buildSpinBoxRow(() => setModalState(() {})),
+                    const SizedBox(height: 20),
+                    ElevatedButton(
+                      onPressed: () {
+                        print("押された");
+                        controller.setMusicFiles();
+                        Navigator.pop(context);
+                      },
+                      child: const Text('保存'),
+                    ),
+                  ],
+                ),
               ),
             );
           },

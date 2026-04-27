@@ -87,6 +87,8 @@ class MusicPlayerController extends ChangeNotifier {
     '配信B': ShuffleConfig(name: '配信B', frequency: 0),
   };
 
+  DateTime? filterDate;
+
   MusicPlayerController() {
     _init();
   }
@@ -164,9 +166,22 @@ class MusicPlayerController extends ChangeNotifier {
 
   void setMusicFiles() async {
     // 1) 端末内の全音楽ファイルをロードし、新しいフォルダがあれば設定に追加
-    final musicfiles = await AudioFileService.loadMusicFiles();
+    List<MusicFile> musicfiles = await AudioFileService.loadMusicFiles();
     if (musicfiles.isEmpty) {
       print('No music files found.');
+      return;
+    }
+
+    // Filter by date if filterDate is set
+    if (filterDate != null) {
+      final startOfDay = DateTime(filterDate!.year, filterDate!.month, filterDate!.day);
+      musicfiles = musicfiles.where((f) {
+        return f.modified != null && (f.modified!.isAfter(startOfDay) || f.modified!.isAtSameMomentAs(startOfDay));
+      }).toList();
+    }
+
+    if (musicfiles.isEmpty) {
+      print('No music files found after filtering.');
       return;
     }
 
