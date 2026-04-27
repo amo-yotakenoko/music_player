@@ -131,8 +131,12 @@ class MusicPlayerController extends ChangeNotifier {
   }
 
   Future<void> addToQueueAndPlay(MusicFile music) async {
-    final existingIndex = _playQueue.indexWhere((item) => item.path == music.path);
-    final playTarget = existingIndex == -1 ? MusicFile.from(music) : _playQueue[existingIndex];
+    final existingIndex = _playQueue.indexWhere(
+      (item) => item.path == music.path,
+    );
+    final playTarget = existingIndex == -1
+        ? MusicFile.from(music)
+        : _playQueue[existingIndex];
 
     if (existingIndex == -1) {
       _playQueue.add(playTarget);
@@ -194,10 +198,12 @@ class MusicPlayerController extends ChangeNotifier {
     final diffResult = diffutil.calculateListDiff(nowDirs, targetDirs);
     final updates = diffResult.getUpdatesWithData();
 
-    print('Updating queue: target length ${targetDirs.length}, current length ${nowDirs.length}');
+    print(
+      'Updating queue: target length ${targetDirs.length}, current length ${nowDirs.length}',
+    );
 
     final queue = List<MusicFile>.from(_playQueue);
-    
+
     // 重複回避のためのトラッキング
     final Set<String> usedPathsInQueue = queue.map((m) => m.path).toSet();
     final Map<String, int> dirPoolIndices = {};
@@ -206,9 +212,9 @@ class MusicPlayerController extends ChangeNotifier {
       if (update is diffutil.DataInsert<String>) {
         final dirName = update.data;
         final files = dirToFiles[dirName] ?? musicfiles;
-        
+
         MusicFile? selected;
-        
+
         // 1. 未使用の曲（パス）を優先的に探す
         int startIdx = dirPoolIndices[dirName] ?? 0;
         for (int i = 0; i < files.length; i++) {
@@ -220,16 +226,20 @@ class MusicPlayerController extends ChangeNotifier {
             break;
           }
         }
-        
+
         // 2. 全て使用済みなら、前後と被らないものを探す
         if (selected == null) {
           for (int i = 0; i < files.length; i++) {
             int currentIdx = (startIdx + i) % files.length;
             final f = files[currentIdx];
-            
-            final prevPath = update.position > 0 ? queue[update.position - 1].path : null;
-            final nextPath = update.position < queue.length ? queue[update.position].path : null;
-            
+
+            final prevPath = update.position > 0
+                ? queue[update.position - 1].path
+                : null;
+            final nextPath = update.position < queue.length
+                ? queue[update.position].path
+                : null;
+
             if (f.path != prevPath && f.path != nextPath) {
               selected = f;
               dirPoolIndices[dirName] = (currentIdx + 1) % files.length;
@@ -237,7 +247,7 @@ class MusicPlayerController extends ChangeNotifier {
             }
           }
         }
-        
+
         // 3. どうしても見つからなければ順番通りに出す
         if (selected == null) {
           int currentIdx = startIdx % files.length;
@@ -248,7 +258,6 @@ class MusicPlayerController extends ChangeNotifier {
         final newFile = MusicFile.from(selected);
         queue.insert(update.position, newFile);
         usedPathsInQueue.add(newFile.path);
-
       } else if (update is diffutil.DataRemove<String>) {
         final removed = queue.removeAt(update.position);
         usedPathsInQueue.remove(removed.path);
@@ -271,7 +280,9 @@ class MusicPlayerController extends ChangeNotifier {
         }
       }
     }
-    print('Queue sync complete. Match target: $isMatch, Final length: ${finalDirs.length}');
+    print(
+      'Queue sync complete. Match target: $isMatch, Final length: ${finalDirs.length}',
+    );
 
     notifyListeners();
   }

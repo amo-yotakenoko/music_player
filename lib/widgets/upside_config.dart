@@ -28,7 +28,8 @@ class _ConfigSetterState extends State<ConfigSetter> {
             Navigator.push(
               context,
               MaterialPageRoute(
-                builder: (context) => SearchMusicScreen(controller: widget.controller),
+                builder: (context) =>
+                    SearchMusicScreen(controller: widget.controller),
               ),
             );
           },

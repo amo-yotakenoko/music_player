@@ -81,9 +81,7 @@ class _SearchMusicScreenState extends State<SearchMusicScreen> {
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
                   Text(
-                    _query.isEmpty
-                        ? '音楽ファイルが見つかりませんでした'
-                        : '検索に一致する曲がありませんでした',
+                    _query.isEmpty ? '音楽ファイルが見つかりませんでした' : '検索に一致する曲がありませんでした',
                   ),
                   const SizedBox(height: 12),
                   ElevatedButton(
@@ -114,7 +112,8 @@ class _SearchMusicScreenState extends State<SearchMusicScreen> {
                   onMenuPressed: () {},
                   onMoveUp: null,
                   onMoveDown: null,
-                  isPlaying: widget.controller.selectedMusic?.path == music.path &&
+                  isPlaying:
+                      widget.controller.selectedMusic?.path == music.path &&
                       widget.controller.isPlaying,
                 );
               },
