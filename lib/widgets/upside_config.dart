@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import '../controllers/music_player_controller.dart';
-import 'package:flutter_spinbox/flutter_spinbox.dart';
 
 class ConfigSetter extends StatefulWidget implements PreferredSizeWidget {
   const ConfigSetter({super.key, required this.controller});
@@ -26,7 +25,7 @@ class _ConfigSetterState extends State<ConfigSetter> {
           icon: const Icon(Icons.refresh),
           onPressed: () {
             widget.controller.clearFiles();
-            widget.controller.SetMusicFiles();
+            widget.controller.setMusicFiles();
           },
         ),
         IconButton(
@@ -58,7 +57,7 @@ class _ConfigSetterState extends State<ConfigSetter> {
                   ElevatedButton(
                     onPressed: () {
                       print("押された");
-                      controller.SetMusicFiles();
+                      controller.setMusicFiles();
                       Navigator.pop(context);
                     },
                     child: const Text('保存'),

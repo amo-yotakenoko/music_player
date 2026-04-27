@@ -2,16 +2,17 @@ import 'dart:async';
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:audioplayers/audioplayers.dart';
+import 'package:path/path.dart' as p;
 import '../classes/music.dart';
 import '../services/audio_file_service.dart';
 import 'package:flutter_spinbox/flutter_spinbox.dart';
 import 'package:diffutil_dart/diffutil.dart' as diffutil;
 
-class ShuffleCoonfig {
+class ShuffleConfig {
   String name;
   int frequency;
   bool shuffle = false;
-  ShuffleCoonfig({
+  ShuffleConfig({
     required this.name,
     required this.frequency,
     this.shuffle = false,
@@ -77,11 +78,12 @@ class MusicPlayerController extends ChangeNotifier {
   StreamSubscription? _stateSub;
   StreamSubscription? _compSub;
 
-  Map<String, ShuffleCoonfig> shuffleConfig = {
-    'A': ShuffleCoonfig(name: 'A', frequency: 1),
-    'B': ShuffleCoonfig(name: 'B', frequency: 0),
-    'C': ShuffleCoonfig(name: 'C', frequency: 0),
-    '配信': ShuffleCoonfig(name: '配信', frequency: 0),
+  Map<String, ShuffleConfig> shuffleConfig = {
+    'A': ShuffleConfig(name: 'A', frequency: 1),
+    'B': ShuffleConfig(name: 'B', frequency: 0),
+    'C': ShuffleConfig(name: 'C', frequency: 0),
+    '配信A': ShuffleConfig(name: '配信A', frequency: 0),
+    '配信B': ShuffleConfig(name: '配信B', frequency: 0),
   };
 
   MusicPlayerController() {
@@ -141,72 +143,111 @@ class MusicPlayerController extends ChangeNotifier {
     await _audioPlayer.setVolume(music.adjustedVolume);
   }
 
-  void SetMusicFiles() async {
-    // 1) 現在の再生キューとターゲットのディレクトリ順を比較して差分を計算
-    // 2) Insert/Remove/Move に沿って queue を更新する
-    // 3) 新規追加が必要な場合、未再生リストから優先的に取得し
-    //    それでも足りない場合は既存キューの再利用を行う
-    final targetDirs = dirIter().take(100).toList();
-    final nowDirs = _playQueue.map((x) => x.directory.split('/').last).toList();
-    final updates = diffutil.calculateListDiff(nowDirs, targetDirs);
-
-    print('targetDirs: $targetDirs');
-    print('nowDirs: $nowDirs');
-
+  void setMusicFiles() async {
+    // 1) 端末内の全音楽ファイルをロードし、新しいフォルダがあれば設定に追加
     final musicfiles = await AudioFileService.loadMusicFiles();
 
-    musicfiles.shuffle();
+    final allDirs = musicfiles.map((x) => p.basename(x.directory)).toSet();
+    bool configChanged = false;
+    for (final dir in allDirs) {
+      if (!shuffleConfig.containsKey(dir)) {
+        shuffleConfig[dir] = ShuffleConfig(name: dir, frequency: 0);
+        configChanged = true;
+      }
+    }
+    if (configChanged) {
+      notifyListeners();
+    }
+
+    // 2) 現在の再生キューとターゲットのディレクトリ順を比較して差分を計算
+    final targetDirs = dirIter().take(100).toList();
+    final nowDirs = _playQueue.map((x) => p.basename(x.directory)).toList();
+    // calculateListDiff の結果から getUpdatesWithData() を使うことで、
+    // インデックス計算を自前で行わずに、挿入されるデータを直接取得できます。
+    final diffResult = diffutil.calculateListDiff(nowDirs, targetDirs);
+    final updates = diffResult.getUpdatesWithData();
+
+    print('targetDirs: $targetDirs (length: ${targetDirs.length})');
+    print('nowDirs: $nowDirs (length: ${nowDirs.length})');
+
+    // 3) 未使用のファイルをランダムに選ぶため、現在キューにあるパスを除外してシャッフル
+    final queuedPaths = _playQueue.map((m) => m.path).toSet();
+    final availableMusicFiles =
+        musicfiles.where((m) => !queuedPaths.contains(m.path)).toList();
+    availableMusicFiles.shuffle();
 
     final queue = List<MusicFile>.from(_playQueue);
 
-    for (final update in updates.getUpdates()) {
-      if (update is diffutil.Insert) {
-        // insert は targetDirs の順序に従って追加する
-        for (int i = 0; i < update.count; i++) {
-          final dirName = targetDirs[update.position + i];
-          final index = musicfiles.indexWhere(
-            (x) => x.directory.split('/').last == dirName,
-          );
+    for (final update in updates) {
+      print('Applying update: $update');
+      if (update is diffutil.DataInsert<String>) {
+        final dirName = update.data;
+        print('  Inserting from directory: $dirName at position ${update.position}');
+        final index = availableMusicFiles.indexWhere(
+          (x) => p.basename(x.directory) == dirName,
+        );
 
-          late final MusicFile newMusicFile;
-          if (index != -1) {
-            // 未再生リストから取得
-            newMusicFile = musicfiles.removeAt(index);
+        late final MusicFile newMusicFile;
+        if (index != -1) {
+          // 未再生リストから取得
+          newMusicFile = availableMusicFiles.removeAt(index);
+          print('    Picked new file from available list: ${newMusicFile.title}');
+        } else {
+          // 未再生リストが足りない場合はすでにキューにあるものを再利用
+          // ただし、直近で挿入したばかりのものは避けるため、元のキューから探す
+          final candidates = _playQueue
+              .where((x) => p.basename(x.directory) == dirName)
+              .toList();
+
+          if (candidates.isNotEmpty) {
+            candidates.shuffle();
+            newMusicFile = MusicFile.from(candidates.first);
+            print('    Reusing file from old queue: ${newMusicFile.title}');
+          } else if (availableMusicFiles.isNotEmpty) {
+            // それでも候補がなければ残り未再生リストから補填
+            newMusicFile = availableMusicFiles.removeAt(0);
+            print('    No match for directory, fallback to random available: ${newMusicFile.title}');
+          } else if (_playQueue.isNotEmpty) {
+            // それでもダメなら古い再生キューから一つだけ流用
+            final fallback = List.of(_playQueue)..shuffle();
+            newMusicFile = MusicFile.from(fallback.first);
+            print('    Total fallback to old queue: ${newMusicFile.title}');
           } else {
-            // 未再生リストが足りない場合はすでに使ったものを再利用
-            final candidates = queue
-                .where((x) => x.directory.split('/').last == dirName)
-                .toList();
-
-            if (candidates.isNotEmpty) {
-              candidates.shuffle();
-              newMusicFile = MusicFile.from(candidates.first);
-            } else if (musicfiles.isNotEmpty) {
-              // それでも候補がなければ残り未再生リストから補填
-              newMusicFile = musicfiles.removeAt(0);
-            } else if (_playQueue.isNotEmpty) {
-              // それでもダメなら古い再生キューから一つだけ流用
-              final fallback = List.of(_playQueue)..shuffle();
-              newMusicFile = MusicFile.from(fallback.first);
-            } else {
-              // 最後は空ファイルでフォールバック
-              newMusicFile = MusicFile(File(''));
-            }
+            // 最後は空ファイルでフォールバック
+            newMusicFile = MusicFile(File(''));
+            print('    Critical fallback: Empty file');
           }
-
-          queue.insert(update.position + i, newMusicFile);
         }
-      } else if (update is diffutil.Remove) {
+
+        queue.insert(update.position, newMusicFile);
+      } else if (update is diffutil.DataRemove<String>) {
         // 不要になった項目を削除
-        queue.removeRange(update.position, update.position + update.count);
-      } else if (update is diffutil.Move) {
+        print('  Removing item: ${update.data} at pos=${update.position}');
+        queue.removeAt(update.position);
+      } else if (update is diffutil.DataMove<String>) {
         // 順序変更を反映
+        print('  Moving item from ${update.from} to ${update.to}');
         final item = queue.removeAt(update.from);
         queue.insert(update.to, item);
       }
     }
 
     _playQueue = queue;
+
+    // 検証
+    final finalDirs = _playQueue.map((x) => p.basename(x.directory)).toList();
+    print('Final nowDirs: $finalDirs');
+    bool isMatch = finalDirs.length == targetDirs.length;
+    if (isMatch) {
+      for (int i = 0; i < finalDirs.length; i++) {
+        if (finalDirs[i] != targetDirs[i]) {
+          isMatch = false;
+          break;
+        }
+      }
+    }
+    print('Does final queue match targetDirs? $isMatch');
+
     notifyListeners();
   }
 
