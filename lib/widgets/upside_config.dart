@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../controllers/music_player_controller.dart';
+import 'search_music_screen.dart';
 
 class ConfigSetter extends StatefulWidget implements PreferredSizeWidget {
   const ConfigSetter({super.key, required this.controller});
@@ -21,6 +22,17 @@ class _ConfigSetterState extends State<ConfigSetter> {
       title: const Text('Android Music List'),
       backgroundColor: Theme.of(context).colorScheme.inversePrimary,
       actions: [
+        IconButton(
+          icon: const Icon(Icons.search),
+          onPressed: () {
+            Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (context) => SearchMusicScreen(controller: widget.controller),
+              ),
+            );
+          },
+        ),
         IconButton(
           icon: const Icon(Icons.refresh),
           onPressed: () {

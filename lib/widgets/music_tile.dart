@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../classes/music.dart';
+import 'package:path/path.dart' as p;
 
 /// 【共通命令】
 /// リストを少しだけスクロールさせる
@@ -32,18 +33,50 @@ class MusicTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final dirName = p.basename(music.directory);
+
     return ListTile(
       leading: Row(
         crossAxisAlignment: CrossAxisAlignment.center,
         mainAxisSize: MainAxisSize.min,
         children: [
-          IconButton(
-            padding: EdgeInsets.zero,
-            constraints: const BoxConstraints(),
-            icon: Icon(isPlaying ? Icons.play_circle_filled : Icons.music_note),
-            color: isPlaying ? Colors.green : Colors.blue,
-            onPressed: onMenuPressed,
+          // アイコンとディレクトリ名のオーバーレイ
+          Stack(
+            clipBehavior: Clip.none,
+            children: [
+              IconButton(
+                padding: EdgeInsets.zero,
+                constraints: const BoxConstraints(),
+                icon: Icon(
+                  isPlaying ? Icons.play_circle_filled : Icons.music_note,
+                ),
+                color: isPlaying ? Colors.green : Colors.blue,
+                onPressed: onMenuPressed,
+              ),
+              Positioned(
+                bottom: -4,
+                right: -4,
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 0),
+                  decoration: BoxDecoration(
+                    color: (isPlaying ? Colors.green : Colors.blue)
+                        .withOpacity(0.8),
+                    borderRadius: BorderRadius.circular(4),
+                  ),
+                  child: Text(
+                    dirName,
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 8,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ),
+              ),
+            ],
           ),
+
+          const SizedBox(width: 8),
 
           Column(
             mainAxisAlignment: MainAxisAlignment.center,
