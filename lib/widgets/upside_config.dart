@@ -18,36 +18,62 @@ class ConfigSetter extends StatefulWidget implements PreferredSizeWidget {
 class _ConfigSetterState extends State<ConfigSetter> {
   @override
   Widget build(BuildContext context) {
-    return AppBar(
-      title: const Text('Android Music List'),
-      backgroundColor: Theme.of(context).colorScheme.inversePrimary,
-      actions: [
-        IconButton(
-          icon: const Icon(Icons.search),
-          onPressed: () {
-            Navigator.push(
-              context,
-              MaterialPageRoute(
-                builder: (context) =>
-                    SearchMusicScreen(controller: widget.controller),
+    return ListenableBuilder(
+      listenable: widget.controller,
+      builder: (context, child) {
+        return AppBar(
+          title: Row(
+            children: [
+              const SizedBox(width: 8),
+              Expanded(
+                child: Slider(
+                  value: widget.controller.playbackSpeed,
+                  min: 1.0,
+                  max: 2.0,
+                  divisions: 10,
+                  label:
+                      '${widget.controller.playbackSpeed.toStringAsFixed(1)}x',
+                  onChanged: (value) {
+                    widget.controller.setPlaybackSpeed(value);
+                  },
+                ),
               ),
-            );
-          },
-        ),
-        IconButton(
-          icon: const Icon(Icons.refresh),
-          onPressed: () {
-            widget.controller.clearFiles();
-            widget.controller.setMusicFiles();
-          },
-        ),
-        IconButton(
-          icon: const Icon(Icons.source),
-          onPressed: () {
-            _openModal(context, widget.controller);
-          },
-        ),
-      ],
+              Text(
+                '${widget.controller.playbackSpeed.toStringAsFixed(1)}x',
+                style: const TextStyle(fontSize: 12),
+              ),
+            ],
+          ),
+          backgroundColor: Theme.of(context).colorScheme.inversePrimary,
+          actions: [
+            IconButton(
+              icon: const Icon(Icons.search),
+              onPressed: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) =>
+                        SearchMusicScreen(controller: widget.controller),
+                  ),
+                );
+              },
+            ),
+            IconButton(
+              icon: const Icon(Icons.refresh),
+              onPressed: () {
+                widget.controller.clearFiles();
+                widget.controller.setMusicFiles();
+              },
+            ),
+            IconButton(
+              icon: const Icon(Icons.source),
+              onPressed: () {
+                _openModal(context, widget.controller);
+              },
+            ),
+          ],
+        );
+      },
     );
   }
 
@@ -69,8 +95,9 @@ class _ConfigSetterState extends State<ConfigSetter> {
                     ListTile(
                       title: const Text('開始日フィルタ'),
                       subtitle: Text(
-                          controller.filterDate?.toString().split(' ')[0] ??
-                              'なし (全件)'),
+                        controller.filterDate?.toString().split(' ')[0] ??
+                            'なし (全件)',
+                      ),
                       trailing: const Icon(Icons.calendar_today),
                       onTap: () async {
                         final picked = await showDatePicker(

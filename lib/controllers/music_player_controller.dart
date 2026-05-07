@@ -56,18 +56,21 @@ class MusicPlayerController extends ChangeNotifier {
 
   // --- 状態（State） ---
   List<MusicFile> _playQueue = [];
+  List<MusicFile> _allLoadedFiles = [];
   bool _isLoading = false;
   MusicFile? _selectedMusic;
   bool _isPlaying = false;
+  double _playbackSpeed = 1.0;
   final ValueNotifier<Duration> _position = ValueNotifier(Duration.zero);
   final ValueNotifier<Duration> _duration = ValueNotifier(Duration.zero);
 
   // --- 外部公開用のゲッター ---
   List<MusicFile> get musicFiles => _playQueue;
-  List<MusicFile> get allMusicFiles => _playQueue;
+  List<MusicFile> get allMusicFiles => _allLoadedFiles;
   bool get isLoading => _isLoading;
   MusicFile? get selectedMusic => _selectedMusic;
   bool get isPlaying => _isPlaying;
+  double get playbackSpeed => _playbackSpeed;
   ValueNotifier<Duration> get positionNotifier => _position;
   ValueNotifier<Duration> get durationNotifier => _duration;
   Duration get position => _position.value;
@@ -122,7 +125,9 @@ class MusicPlayerController extends ChangeNotifier {
   Future<void> loadFiles() async {
     _isLoading = true;
     notifyListeners();
-    _playQueue = await AudioFileService.loadMusicFiles();
+    final files = await AudioFileService.loadMusicFiles();
+    _allLoadedFiles = List<MusicFile>.from(files);
+    _playQueue = files;
     _isLoading = false;
     notifyListeners();
   }
@@ -162,6 +167,13 @@ class MusicPlayerController extends ChangeNotifier {
 
     // 3. プレイヤーに適用（1.0を超えないように制限）
     await _audioPlayer.setVolume(music.adjustedVolume);
+    await _audioPlayer.setPlaybackRate(_playbackSpeed);
+  }
+
+  Future<void> setPlaybackSpeed(double speed) async {
+    _playbackSpeed = speed;
+    await _audioPlayer.setPlaybackRate(speed);
+    notifyListeners();
   }
 
   void setMusicFiles() async {
@@ -299,6 +311,50 @@ class MusicPlayerController extends ChangeNotifier {
       'Queue sync complete. Match target: $isMatch, Final length: ${finalDirs.length}',
     );
 
+    notifyListeners();
+  }
+
+  /// 指定した曲をキューの現在の位置に挿入（または移動）して即座に再生する
+  Future<void> playNow(MusicFile music) async {
+    final index = _playQueue.indexWhere((m) => m.path == music.path);
+    if (index != -1) {
+      // 既存なら削除
+      _playQueue.removeAt(index);
+    }
+
+    // 現在の曲の次（または先頭）に挿入
+    int insertIdx = 0;
+    if (_selectedMusic != null) {
+      final currentIdx = _playQueue.indexOf(_selectedMusic!);
+      if (currentIdx != -1) {
+        insertIdx = currentIdx;
+      }
+    }
+
+    final newFile = MusicFile.from(music);
+    _playQueue.insert(insertIdx, newFile);
+    _selectedMusic = newFile;
+    notifyListeners();
+    await play(newFile);
+  }
+
+  /// 指定した曲をキューの「次」に挿入（または移動）する
+  void addNext(MusicFile music) {
+    final index = _playQueue.indexWhere((m) => m.path == music.path);
+    if (index != -1) {
+      _playQueue.removeAt(index);
+    }
+
+    int insertIdx = 0;
+    if (_selectedMusic != null) {
+      final currentIdx = _playQueue.indexOf(_selectedMusic!);
+      if (currentIdx != -1) {
+        insertIdx = currentIdx + 1;
+      }
+    }
+
+    final newFile = MusicFile.from(music);
+    _playQueue.insert(insertIdx.clamp(0, _playQueue.length), newFile);
     notifyListeners();
   }
 
