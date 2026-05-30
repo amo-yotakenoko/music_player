@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:math' as math;
 import 'package:path/path.dart' as p;
 import 'package:flutter/material.dart';
 import 'package:audiotags/audiotags.dart';
@@ -13,16 +14,22 @@ class MusicFile {
   String title;
   final String directory;
   String? artist;
-  double? meanVolume;
-  double? maxVolume; //未使用
+  double? integratedLoudness;
+  double? truePeak;
   DateTime? modified;
 
   double get adjustedVolume {
-    if (meanVolume == null) return 0.0;
-    // 例: -14dBを基準にして、そこからの差分をボリューム調整に反映
-    double adjustment = -14.0 - meanVolume!;
-    // 調整値を適用（例: 1dBの差で10%の音量変化とする）
-    return (adjustment / 10).clamp(-1.0, 1.0);
+    if (integratedLoudness == null) return 1.0;
+    // ターゲットを -14.0 LUFS とする
+    const double targetLoudness = -14.0;
+    // 必要なゲイン（dB）を計算
+    double gainDb = targetLoudness - integratedLoudness!;
+    
+    // デシベルからリニアスケールへの変換: 10^(db/20)
+    double linearGain = math.pow(10, gainDb / 20).toDouble();
+    
+    // 基準音量を 0.8 とし、そこから調整。1.0を超えないようにする。
+    return (0.8 * linearGain).clamp(0.0, 1.0);
   }
 
   final Key key;
@@ -42,8 +49,8 @@ class MusicFile {
       directory = other.directory,
       key = UniqueKey(),
       artist = other.artist,
-      meanVolume = other.meanVolume,
-      maxVolume = other.maxVolume;
+      integratedLoudness = other.integratedLoudness,
+      truePeak = other.truePeak;
 
   Future<void> loadTags() async {
     try {
@@ -56,54 +63,61 @@ class MusicFile {
     }
   }
 
-  /// FFmpegのvolumedetectフィルターを使用して音量を検出する
+  /// キャッシュから音量データを読み込む（FFmpegは実行しない）
+  Future<void> loadVolumeFromCache() async {
+    if (integratedLoudness != null) return;
+    final prefs = await SharedPreferences.getInstance();
+    double? storedVolume = prefs.getDouble('${title}_lufs');
+    if (storedVolume != null) {
+      integratedLoudness = storedVolume;
+    }
+  }
+
+  /// FFmpegのloudnormフィルターを使用して音量を検出する
   Future<void> detectVolume() async {
-    if (meanVolume != null) {
-      print("既に音量が検出されているためスキップ: $title -> $meanVolume dB");
+    if (integratedLoudness != null) {
+      print("既に音量が検出されているためスキップ: $title -> $integratedLoudness LUFS");
       return;
     }
 
-    final prefs = await SharedPreferences.getInstance();
-
-    double? storedVolume = prefs.getDouble(title);
-    if (storedVolume != null) {
-      meanVolume = storedVolume;
-      print("CSVから読み込み: $title -> $meanVolume dB");
+    await loadVolumeFromCache();
+    if (integratedLoudness != null) {
+      print("保存済みデータから読み込み: $title -> $integratedLoudness LUFS");
       return;
     }
 
     try {
-      // -vn: 映像なし, -sn: 字幕なし, -dn: データなし
+      // loudnormフィルターを使用して計測。print_format=json で詳細情報を取得
       final session = await FFmpegKit.execute(
-        '-i "$path" -af volumedetect -vn -sn -dn -f null -',
+        '-i "$path" -af loudnorm=print_format=json -vn -sn -dn -f null -',
       );
       final returnCode = await session.getReturnCode();
 
       if (ReturnCode.isSuccess(returnCode)) {
         final logs = await session.getLogs();
-        for (final log in logs) {
-          final message = log.getMessage();
-          if (message.contains('mean_volume:')) {
-            final match = RegExp(
-              r'mean_volume:\s+(-?\d+\.?\d*)\s+dB',
-            ).firstMatch(message);
-            if (match != null) {
-              meanVolume = double.tryParse(match.group(1)!);
-            }
+        String fullLog = logs.map((l) => l.getMessage()).join();
+        
+        // JSON部分を抽出
+        final matches = RegExp(r'\{[\s\S]*?\}').allMatches(fullLog);
+        final jsonMatch = matches.isNotEmpty ? matches.last : null;
+        if (jsonMatch != null) {
+          final jsonStr = jsonMatch.group(0)!;
+          // 正規表現で値を抽出
+          final iMatch = RegExp(r'"input_i"\s*:\s*"(-?\d+\.?\d*)"').firstMatch(jsonStr);
+          final tpMatch = RegExp(r'"input_tp"\s*:\s*"(-?\d+\.?\d*)"').firstMatch(jsonStr);
+
+          if (iMatch != null) {
+            integratedLoudness = double.tryParse(iMatch.group(1)!);
           }
-          if (message.contains('max_volume:')) {
-            final match = RegExp(
-              r'max_volume:\s+(-?\d+\.?\d*)\s+dB',
-            ).firstMatch(message);
-            if (match != null) {
-              maxVolume = double.tryParse(match.group(1)!);
-            }
+          if (tpMatch != null) {
+            truePeak = double.tryParse(tpMatch.group(1)!);
           }
         }
-        print('音量検出完了 ($title): mean: $meanVolume dB, max: $maxVolume dB');
-        if (meanVolume != null) {
-          print("DB保存: $title -> $meanVolume dB");
-          await prefs.setDouble(title, meanVolume!);
+
+        print('音量検出完了 ($title): I: $integratedLoudness LUFS, TP: $truePeak dB');
+        if (integratedLoudness != null) {
+          final prefs = await SharedPreferences.getInstance();
+          await prefs.setDouble('${title}_lufs', integratedLoudness!);
         }
       } else {
         print('音量検出に失敗しました ($title): ${await session.getFailStackTrace()}');
@@ -116,6 +130,6 @@ class MusicFile {
   @override
   String toString() {
     // メンバ変数を分かりやすく整形
-    return 'MusicFile(title: $title, directory: $directory, meanVolume: $meanVolume)';
+    return 'MusicFile(title: $title, directory: $directory, integratedLoudness: $integratedLoudness)';
   }
 }

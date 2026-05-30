@@ -159,14 +159,28 @@ class MusicPlayerController extends ChangeNotifier {
     _selectedMusic = music;
     notifyListeners();
     await _audioPlayer.stop();
-    await _audioPlayer.play(DeviceFileSource(music.path));
-    await music.detectVolume();
-    print(
-      "Applying volume adjustment for ${music.title}: ${music.adjustedVolume}",
-    );
 
-    // 3. プレイヤーに適用（1.0を超えないように制限）
-    await _audioPlayer.setVolume(music.adjustedVolume);
+    // 再生開始前にキャッシュから音量を読み込んで設定（あれば即座に適用）
+    await music.loadVolumeFromCache();
+    if (music.integratedLoudness != null) {
+      print("キャッシュから音量を適用: ${music.adjustedVolume}");
+      await _audioPlayer.setVolume(music.adjustedVolume);
+    } else {
+      // 未計測の場合は一旦デフォルト音量（例: 0.8）に設定
+      await _audioPlayer.setVolume(0.8);
+    }
+
+    await _audioPlayer.play(DeviceFileSource(music.path));
+
+    // 音量計測（キャッシュになければFFmpeg実行）
+    if (music.integratedLoudness == null) {
+      await music.detectVolume();
+      print(
+        "計測後に音量を適用: ${music.title}: ${music.adjustedVolume}",
+      );
+      await _audioPlayer.setVolume(music.adjustedVolume);
+    }
+
     await _audioPlayer.setPlaybackRate(_playbackSpeed);
   }
 
