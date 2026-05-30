@@ -1,7 +1,8 @@
 import 'dart:async';
 import 'dart:io';
 import 'package:flutter/material.dart';
-import 'package:audioplayers/audioplayers.dart';
+import 'package:just_audio/just_audio.dart';
+import 'package:just_audio_background/just_audio_background.dart';
 import 'package:path/path.dart' as p;
 import '../classes/music.dart';
 import '../services/audio_file_service.dart';
@@ -97,17 +98,21 @@ class MusicPlayerController extends ChangeNotifier {
   }
 
   void _init() {
-    _posSub = _audioPlayer.onPositionChanged.listen((p) {
+    _posSub = _audioPlayer.positionStream.listen((p) {
       _position.value = p;
     });
-    _durSub = _audioPlayer.onDurationChanged.listen((d) {
-      _duration.value = d;
+    _durSub = _audioPlayer.durationStream.listen((d) {
+      if (d != null) _duration.value = d;
     });
-    _stateSub = _audioPlayer.onPlayerStateChanged.listen((state) {
-      _isPlaying = state == PlayerState.playing;
+    _stateSub = _audioPlayer.playerStateStream.listen((state) {
+      _isPlaying = state.playing;
       notifyListeners();
     });
-    _compSub = _audioPlayer.onPlayerComplete.listen((_) => playNext());
+    _compSub = _audioPlayer.processingStateStream.listen((state) {
+      if (state == ProcessingState.completed) {
+        playNext();
+      }
+    });
   }
 
   @override
@@ -170,7 +175,13 @@ class MusicPlayerController extends ChangeNotifier {
       await _audioPlayer.setVolume(0.8);
     }
 
-    await _audioPlayer.play(DeviceFileSource(music.path));
+    // just_audio using AudioSource for background support
+    final source = AudioSource.uri(
+      Uri.file(music.path),
+      tag: music.toMediaItem(),
+    );
+    await _audioPlayer.setAudioSource(source);
+    _audioPlayer.play();
 
     // 音量計測（キャッシュになければFFmpeg実行）
     if (music.integratedLoudness == null) {
@@ -181,12 +192,12 @@ class MusicPlayerController extends ChangeNotifier {
       await _audioPlayer.setVolume(music.adjustedVolume);
     }
 
-    await _audioPlayer.setPlaybackRate(_playbackSpeed);
+    await _audioPlayer.setSpeed(_playbackSpeed);
   }
 
   Future<void> setPlaybackSpeed(double speed) async {
     _playbackSpeed = speed;
-    await _audioPlayer.setPlaybackRate(speed);
+    await _audioPlayer.setSpeed(speed);
     notifyListeners();
   }
 
@@ -423,7 +434,7 @@ class MusicPlayerController extends ChangeNotifier {
     if (_isPlaying) {
       await _audioPlayer.pause();
     } else {
-      await _audioPlayer.resume();
+      await _audioPlayer.play();
     }
   }
 
@@ -432,15 +443,13 @@ class MusicPlayerController extends ChangeNotifier {
   }
 
   Future<void> skipSeconds(int seconds) async {
-    final currentPos = await _audioPlayer.getCurrentPosition();
-    if (currentPos == null) return;
+    final currentPos = _audioPlayer.position;
     final newPos = currentPos + Duration(seconds: seconds);
     await _audioPlayer.seek(newPos);
   }
 
   Future<void> timeSkip(int time) async {
-    final currentPosition =
-        await _audioPlayer.getCurrentPosition() ?? Duration.zero;
+    final currentPosition = _audioPlayer.position;
     final targetPosition = currentPosition + Duration(seconds: time);
     await _audioPlayer.seek(targetPosition);
   }

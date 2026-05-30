@@ -7,6 +7,7 @@ import 'package:audiotags/audiotags.dart' as Audiotags;
 import 'package:ffmpeg_kit_flutter_new/ffmpeg_kit.dart';
 import 'package:ffmpeg_kit_flutter_new/return_code.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:just_audio_background/just_audio_background.dart';
 
 class MusicFile {
   FileSystemEntity fileEntry;
@@ -51,6 +52,15 @@ class MusicFile {
       artist = other.artist,
       integratedLoudness = other.integratedLoudness,
       truePeak = other.truePeak;
+
+  MediaItem toMediaItem() {
+    return MediaItem(
+      id: path,
+      album: p.basename(directory),
+      title: title,
+      artist: artist ?? "Unknown Artist",
+    );
+  }
 
   Future<void> loadTags() async {
     try {
