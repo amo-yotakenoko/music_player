@@ -185,9 +185,7 @@ class MusicPlayerController extends ChangeNotifier {
     // 音量計測（キャッシュになければFFmpeg実行）
     if (music.integratedLoudness == null) {
       await music.detectVolume();
-      print(
-        "計測後に音量を適用: ${music.title}: ${music.adjustedVolume}",
-      );
+      print("計測後に音量を適用: ${music.title}: ${music.adjustedVolume}");
       await _audioPlayer.setVolume(music.adjustedVolume);
     }
 
@@ -201,6 +199,10 @@ class MusicPlayerController extends ChangeNotifier {
   }
 
   void setMusicFiles() async {
+    print("再ロード開始");
+
+    notifyListeners();
+
     // 1) 端末内の全音楽ファイルをロードし、新しいフォルダがあれば設定に追加
     List<MusicFile> musicfiles = await AudioFileService.loadMusicFiles();
     if (musicfiles.isEmpty) {
@@ -210,9 +212,15 @@ class MusicPlayerController extends ChangeNotifier {
 
     // Filter by date if filterDate is set
     if (filterDate != null) {
-      final startOfDay = DateTime(filterDate!.year, filterDate!.month, filterDate!.day);
+      final startOfDay = DateTime(
+        filterDate!.year,
+        filterDate!.month,
+        filterDate!.day,
+      );
       musicfiles = musicfiles.where((f) {
-        return f.modified != null && (f.modified!.isAfter(startOfDay) || f.modified!.isAtSameMomentAs(startOfDay));
+        return f.modified != null &&
+            (f.modified!.isAfter(startOfDay) ||
+                f.modified!.isAtSameMomentAs(startOfDay));
       }).toList();
     }
 

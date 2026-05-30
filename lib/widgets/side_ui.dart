@@ -1,16 +1,39 @@
 import 'package:flutter/material.dart';
+import '../controllers/music_player_controller.dart';
 import './side_ui_mix_custum.dart';
 
 class SideUI extends StatelessWidget {
-  const SideUI({super.key});
+  const SideUI({super.key, required this.controller});
+
+  final MusicPlayerController controller;
+
+  void mix_update() {
+    print("更新");
+    controller.setMusicFiles();
+  }
 
   @override
   Widget build(BuildContext context) {
     return RotatedBox(
-      quarterTurns: 1, // 1回で時計回りに90度、2回で180度、3回で270度（反時計回り90度）
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [SideMixCustom(), SizedBox(width: 16), SideMixCustom()],
+      quarterTurns: 1,
+      child: SingleChildScrollView(
+        scrollDirection: Axis.horizontal,
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            for (var entry in controller.shuffleConfig.entries) ...[
+              SideMixCustom(config: entry.value, onChanged: mix_update),
+              const SizedBox(
+                height: 24, // 区切り線の長さ
+                child: VerticalDivider(
+                  color: Colors.grey, // 線の色
+                  thickness: 1, // 線の太さ
+                  width: 20, // 左右の余白（スペース）の合計
+                ),
+              ),
+            ],
+          ],
+        ),
       ),
     );
   }

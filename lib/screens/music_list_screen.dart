@@ -43,8 +43,8 @@ class _MusicListScreenState extends State<MusicListScreen> {
         builder: (context, _) {
           return Row(
             children: [
-              Expanded(flex: 1, child: const SideUI()),
-              Expanded(flex: 5, child: MusicListBody(controller: _controller)),
+              Expanded(flex: 1, child: SideUI(controller: _controller)),
+              Expanded(flex: 9, child: MusicListBody(controller: _controller)),
             ],
           );
         },
