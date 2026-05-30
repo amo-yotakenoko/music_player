@@ -3,6 +3,7 @@ import '../controllers/music_player_controller.dart';
 import '../widgets/mini_player.dart';
 import '../widgets/music_list_body.dart';
 import '../widgets/upside_config.dart';
+import '../widgets/side_ui.dart';
 
 /// 【表示層（メイン画面）】
 /// 画面の全体構造（Scaffold）のみを定義し、具体的な中身やロジックは他に任せる。
@@ -40,7 +41,12 @@ class _MusicListScreenState extends State<MusicListScreen> {
       body: ListenableBuilder(
         listenable: _controller,
         builder: (context, _) {
-          return MusicListBody(controller: _controller);
+          return Row(
+            children: [
+              Expanded(flex: 1, child: const SideUI()),
+              Expanded(flex: 5, child: MusicListBody(controller: _controller)),
+            ],
+          );
         },
       ),
 

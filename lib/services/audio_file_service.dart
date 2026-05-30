@@ -83,6 +83,6 @@ class AudioFileService {
         }
       }
     }
-    return files;
+    return files.take(10).toList();
   }
 }
