@@ -241,14 +241,29 @@ class MusicPlayerController extends ChangeNotifier {
       notifyListeners();
     }
 
-    // ディレクトリごとにファイルを分類して事前にシャッフル
+    // ディレクトリごとにファイルを分類して設定に応じてソートまたはシャッフル
     final Map<String, List<MusicFile>> dirToFiles = {};
     for (final f in musicfiles) {
       final d = p.basename(f.directory);
       dirToFiles.putIfAbsent(d, () => []).add(f);
     }
-    for (final list in dirToFiles.values) {
-      list.shuffle();
+    
+    for (final entry in dirToFiles.entries) {
+      final dirName = entry.key;
+      final list = entry.value;
+      final config = shuffleConfig[dirName];
+
+      if (config != null && config.shuffle) {
+        // シャッフルがオンならランダムに
+        list.shuffle();
+      } else {
+        // シャッフルがオフなら日付の新しい順に並べる
+        list.sort((a, b) {
+          final dateA = a.modified ?? DateTime(0);
+          final dateB = b.modified ?? DateTime(0);
+          return dateB.compareTo(dateA); // 新しい順
+        });
+      }
     }
 
     // 2) 現在の再生キューとターゲットのディレクトリ順を比較して差分を計算
