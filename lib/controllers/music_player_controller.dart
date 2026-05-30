@@ -2,7 +2,6 @@ import 'dart:async';
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:just_audio/just_audio.dart';
-import 'package:just_audio_background/just_audio_background.dart';
 import 'package:path/path.dart' as p;
 import '../classes/music.dart';
 import '../services/audio_file_service.dart';
@@ -311,6 +310,28 @@ class MusicPlayerController extends ChangeNotifier {
         queue.insert(update.position, newFile);
         usedPathsInQueue.add(newFile.path);
       } else if (update is diffutil.DataRemove<String>) {
+        if (queue[update.position] == _selectedMusic) {
+          // 現在再生中の曲を削除しようとしている場合、同じディレクトリの別の曲があれば入れ替えて保護する
+          int altIdx = -1;
+          for (int i = 0; i < queue.length; i++) {
+            if (i != update.position &&
+                queue[i].directory == queue[update.position].directory &&
+                queue[i] != _selectedMusic) {
+              altIdx = i;
+              break;
+            }
+          }
+          if (altIdx != -1) {
+            final temp = queue[update.position];
+            queue[update.position] = queue[altIdx];
+            queue[altIdx] = temp;
+          } else {
+            // 他に同じディレクトリの曲がない場合は、再生中の曲を「削除」せず、
+            // この更新ステップをスキップすることで保護する。
+            // インデックスのズレが発生するが、再生継続を優先。
+            continue;
+          }
+        }
         final removed = queue.removeAt(update.position);
         usedPathsInQueue.remove(removed.path);
       } else if (update is diffutil.DataMove<String>) {
