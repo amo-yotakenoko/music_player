@@ -4,6 +4,8 @@ import 'package:path_provider/path_provider.dart';
 import 'package:permission_handler/permission_handler.dart';
 import '../classes/music.dart';
 
+enum LibraryType { all, music, media }
+
 /// 【データ取得層】
 /// 端末内のファイルシステムにアクセスし、音楽ファイルの情報を取得する役割。
 /// このクラス自体は状態を保持せず、呼び出し元にデータを渡すだけの「静的サービス」として機能。
@@ -26,17 +28,25 @@ class AudioFileService {
 
   /// 音楽ファイルのリストを取得する
   /// 返り値: 取得したファイルエンティティのリスト
-  static Future<List<MusicFile>> loadMusicFiles() async {
+  static Future<List<MusicFile>> loadMusicFiles({
+    LibraryType libraryTypeFilter = LibraryType.music,
+  }) async {
     try {
       final hasPermission = await requestPermissions();
       if (!hasPermission) {
         debugPrint('ストレージの権限が拒否されました');
+
         return [];
       }
 
       final musicDir = await _getMusicDirectory();
+
       if (musicDir != null && await musicDir.exists()) {
-        List<MusicFile> musicFiles = await _listMusicFiles(musicDir);
+        List<MusicFile> musicFiles = await _listMusicFiles(
+          musicDir,
+          libraryTypeFilter,
+        );
+
         await Future.wait(musicFiles.map((m) => m.loadTags()));
         return musicFiles;
       } else {
@@ -67,7 +77,10 @@ class AudioFileService {
     return null;
   }
 
-  static Future<List<MusicFile>> _listMusicFiles(Directory dir) async {
+  static Future<List<MusicFile>> _listMusicFiles(
+    Directory dir,
+    LibraryType libraryTypeFilter,
+  ) async {
     final List<MusicFile> files = [];
 
     await for (FileSystemEntity file in dir.list(
@@ -75,6 +88,16 @@ class AudioFileService {
       followLinks: false,
     )) {
       if (file is File) {
+        print(file.parent.path);
+        if (libraryTypeFilter == LibraryType.music &&
+            file.parent.path.toLowerCase().contains('配信')) {
+          continue;
+        }
+        if (libraryTypeFilter == LibraryType.media &&
+            !file.parent.path.toLowerCase().contains('配信')) {
+          continue;
+        }
+
         final path = file.path.toLowerCase();
         if (['.mp3', '.m4a', '.wav'].any((ext) => path.endsWith(ext))) {
           MusicFile musicFile = MusicFile(file);

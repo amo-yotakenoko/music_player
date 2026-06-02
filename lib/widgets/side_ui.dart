@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:music_player/screens/media_screen.dart';
 import '../controllers/music_player_controller.dart';
 import './side_ui_mix_custum.dart';
 
@@ -21,7 +22,9 @@ class SideUI extends StatelessWidget {
         child: Row(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            for (var entry in controller.shuffleConfig.entries) ...[
+            for (var entry in controller.shuffleConfig.entries.where(
+              (entry) => !entry.value.name.contains("配信"),
+            )) ...[
               SideMixCustom(config: entry.value, onChanged: mix_update),
               const SizedBox(
                 height: 24, // 区切り線の長さ
@@ -32,6 +35,16 @@ class SideUI extends StatelessWidget {
                 ),
               ),
             ],
+            ElevatedButton(
+              onPressed: () {
+                print("押された");
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (context) => const MediaScreen()),
+                );
+              },
+              child: Text("配信"),
+            ),
           ],
         ),
       ),
