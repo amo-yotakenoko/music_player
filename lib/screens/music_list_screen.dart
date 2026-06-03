@@ -40,6 +40,15 @@ class _MusicListScreenState extends State<MusicListScreen> {
 
   @override
   Widget build(BuildContext context) {
+    int currentPage = 0;
+
+    final MusicListBody musicListBody = MusicListBody(
+      controller: _musicController,
+    );
+    final MusicListBody mediaListBody = MusicListBody(
+      controller: _mediaController,
+    );
+
     return Scaffold(
       appBar: ConfigSetter(controller: _musicController),
       // ボディ部分だけを監視するように移動
@@ -47,6 +56,18 @@ class _MusicListScreenState extends State<MusicListScreen> {
         listenable: _musicController,
         builder: (context, _) {
           return PageView(
+            onPageChanged: (index) {
+              if (index == 0) {
+                debugPrint('MusicListScreen: Music page selected');
+                // musicListBody.screenUpdate(true);
+                // mediaListBody.screenUpdate(false);
+              } else if (index == 1) {
+                debugPrint('MusicListScreen: Media page selected');
+                // mediaListBody.screenUpdate(true);
+                // musicListBody.screenUpdate(false);
+              }
+            },
+
             children: [
               Row(
                 children: [
@@ -54,13 +75,10 @@ class _MusicListScreenState extends State<MusicListScreen> {
                     flex: 1,
                     child: SideUI(controller: _musicController),
                   ),
-                  Expanded(
-                    flex: 9,
-                    child: MusicListBody(controller: _musicController),
-                  ),
+                  Expanded(flex: 9, child: musicListBody),
                 ],
               ),
-              MusicListBody(controller: _mediaController),
+              mediaListBody,
             ],
           );
         },

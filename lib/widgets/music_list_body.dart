@@ -6,18 +6,51 @@ import '../classes/music.dart';
 
 /// 【表示部品層（ボディ）】
 /// 読み込み中、空、リスト表示の切り替えロジックを担当。
-class MusicListBody extends StatelessWidget {
+class MusicListBody extends StatefulWidget {
   final MusicPlayerController controller;
+  final bool isActive;
 
-  const MusicListBody({super.key, required this.controller});
+  const MusicListBody({
+    super.key,
+    required this.controller,
+    this.isActive = true,
+  });
+
+  @override
+  State<MusicListBody> createState() => _MusicListBodyState();
+}
+
+class _MusicListBodyState extends State<MusicListBody> {
+  static List<MusicListBody> _instances = [];
+
+  @override
+  void initState() {
+    super.initState();
+    _instances.add(widget);
+    widget.controller.playcallBack = _playCallBack;
+  }
+
+  void _playCallBack() {
+    print("playCallBack: ${widget.controller.selectedMusic?.title}");
+  }
+
+  @override
+  void dispose() {
+    _instances.remove(widget);
+    super.dispose();
+  }
+
+  void screenUpdate(bool isActive) {
+    print("screenUpdate: $isActive");
+  }
 
   @override
   Widget build(BuildContext context) {
-    if (controller.isLoading) {
+    if (widget.controller.isLoading) {
       return const Center(child: CircularProgressIndicator());
     }
 
-    if (controller.musicFiles.isEmpty) {
+    if (widget.controller.musicFiles.isEmpty) {
       return _buildEmptyView();
     }
 
@@ -35,26 +68,28 @@ class MusicListBody extends StatelessWidget {
           },
         );
       },
-      itemCount: controller.musicFiles.length,
-      onReorder: controller.reorder,
+      itemCount: widget.controller.musicFiles.length,
+      onReorder: widget.controller.reorder,
       itemBuilder: (context, index) {
-        final music = controller.musicFiles[index];
+        final music = widget.controller.musicFiles[index];
         return MusicTile(
           key: music.key,
           music: music,
-          onTap: () => controller.play(music),
+          onTap: () => widget.controller.play(music),
           // onTap: () => () {},
           onMenuPressed: () {
-            _openItemModal(context, index, music, controller);
+            _openItemModal(context, index, music, widget.controller);
           },
           // ドラッグがあるので、ボタンでの移動はオプションとして残す
-          onMoveUp: index > 0 ? () => controller.moveMusicUp(index) : null,
-          onMoveDown: index < controller.musicFiles.length - 1
-              ? () => controller.moveMusicDown(index)
+          onMoveUp: index > 0
+              ? () => widget.controller.moveMusicUp(index)
+              : null,
+          onMoveDown: index < widget.controller.musicFiles.length - 1
+              ? () => widget.controller.moveMusicDown(index)
               : null,
           isPlaying:
-              controller.selectedMusic?.path == music.path &&
-              controller.isPlaying,
+              widget.controller.selectedMusic?.path == music.path &&
+              widget.controller.isPlaying,
         );
       },
     );
@@ -68,7 +103,7 @@ class MusicListBody extends StatelessWidget {
           const Text('音楽ファイルが見つかりませんでした'),
           const SizedBox(height: 10),
           ElevatedButton(
-            onPressed: controller.loadFiles,
+            onPressed: widget.controller.loadFiles,
             child: const Text('再読み込み'),
           ),
         ],

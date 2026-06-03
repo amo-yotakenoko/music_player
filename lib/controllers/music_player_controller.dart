@@ -12,6 +12,7 @@ class ShuffleConfig {
   String name;
   int frequency;
   bool shuffle = false;
+
   ShuffleConfig({
     required this.name,
     required this.frequency,
@@ -52,7 +53,10 @@ class ShuffleConfig {
 
 /// 【ロジック・状態管理層】
 class MusicPlayerController extends ChangeNotifier {
-  final AudioPlayer _audioPlayer = AudioPlayer();
+  static final AudioPlayer _audioPlayer = AudioPlayer();
+  static MusicPlayerController? activeMusicPlayerController;
+
+  void Function()? playcallBack;
 
   // --- 状態（State） ---
   @protected
@@ -167,6 +171,8 @@ class MusicPlayerController extends ChangeNotifier {
   }
 
   Future<void> play(MusicFile music) async {
+    activeMusicPlayerController = this;
+
     _selectedMusic = music;
     notifyListeners();
     await _audioPlayer.stop();
@@ -188,6 +194,7 @@ class MusicPlayerController extends ChangeNotifier {
     );
     await _audioPlayer.setAudioSource(source);
     _audioPlayer.play();
+    playcallBack?.call();
 
     // 音量計測（キャッシュになければFFmpeg実行）
     if (music.integratedLoudness == null) {
@@ -486,6 +493,7 @@ class MusicPlayerController extends ChangeNotifier {
       await _audioPlayer.pause();
     } else {
       await _audioPlayer.play();
+      playcallBack?.call();
     }
   }
 
@@ -580,4 +588,68 @@ class MusicPlayerController extends ChangeNotifier {
       }
     }
   }
+
+  /// 現在の再生状態を保存
+  MusicPlayerState savePlayerState() {
+    return MusicPlayerState(
+      selectedMusic: _selectedMusic,
+      position: _position.value,
+      isPlaying: _isPlaying,
+      playbackSpeed: _playbackSpeed,
+    );
+  }
+
+  /// 保存された再生状態を復元
+  Future<void> restorePlayerState(MusicPlayerState state) async {
+    final music = state.selectedMusic;
+    if (music == null) return;
+
+    _selectedMusic = music;
+    _playbackSpeed = state.playbackSpeed;
+    notifyListeners();
+
+    // プレイヤーの初期設定
+    await music.loadVolumeFromCache();
+    await _audioPlayer.setVolume(music.adjustedVolume ?? 0.8);
+    await _audioPlayer.setSpeed(_playbackSpeed);
+
+    final source = AudioSource.uri(
+      Uri.file(music.path),
+      tag: music.toMediaItem(),
+    );
+
+    // 指定された位置から読み込み
+    await _audioPlayer.setAudioSource(source, initialPosition: state.position);
+
+    if (state.isPlaying) {
+      _audioPlayer.play();
+      playcallBack?.call();
+    } else {
+      _audioPlayer.pause();
+    }
+  }
+
+  /// 保存された再生状態をUIに反映（プレイヤーの再ロードは行わない）
+  void importState(MusicPlayerState state) {
+    _selectedMusic = state.selectedMusic;
+    _playbackSpeed = state.playbackSpeed;
+    // position, isPlaying, durationはstaticな_audioPlayerを通じて同期されているため、
+    // ここで明示的に代入する必要はありません。
+    notifyListeners();
+  }
+}
+
+/// プレイヤーの状態を保持するためのクラス
+class MusicPlayerState {
+  final MusicFile? selectedMusic;
+  final Duration position;
+  final bool isPlaying;
+  final double playbackSpeed;
+
+  MusicPlayerState({
+    this.selectedMusic,
+    this.position = Duration.zero,
+    this.isPlaying = false,
+    this.playbackSpeed = 1.0,
+  });
 }

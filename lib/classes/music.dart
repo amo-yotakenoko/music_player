@@ -24,10 +24,10 @@ class MusicFile {
     const double targetLoudness = -14.0;
     // 必要なゲイン（dB）を計算
     double gainDb = targetLoudness - integratedLoudness!;
-    
+
     // デシベルからリニアスケールへの変換: 10^(db/20)
     double linearGain = math.pow(10, gainDb / 20).toDouble();
-    
+
     // 基準音量を 0.8 とし、そこから調整。1.0を超えないようにする。
     return (0.8 * linearGain).clamp(0.0, 1.0);
   }
@@ -68,7 +68,9 @@ class MusicFile {
         artist = tags.trackArtist ?? tags.albumArtist ?? "Unknown Artist";
       }
     } catch (e) {
+      debugPrint(' $path');
       debugPrint('タグの読み込みに失敗しました: $e');
+      artist = "Unknown Artist";
     }
   }
 
@@ -105,15 +107,19 @@ class MusicFile {
       if (ReturnCode.isSuccess(returnCode)) {
         final logs = await session.getLogs();
         String fullLog = logs.map((l) => l.getMessage()).join();
-        
+
         // JSON部分を抽出
         final matches = RegExp(r'\{[\s\S]*?\}').allMatches(fullLog);
         final jsonMatch = matches.isNotEmpty ? matches.last : null;
         if (jsonMatch != null) {
           final jsonStr = jsonMatch.group(0)!;
           // 正規表現で値を抽出
-          final iMatch = RegExp(r'"input_i"\s*:\s*"(-?\d+\.?\d*)"').firstMatch(jsonStr);
-          final tpMatch = RegExp(r'"input_tp"\s*:\s*"(-?\d+\.?\d*)"').firstMatch(jsonStr);
+          final iMatch = RegExp(
+            r'"input_i"\s*:\s*"(-?\d+\.?\d*)"',
+          ).firstMatch(jsonStr);
+          final tpMatch = RegExp(
+            r'"input_tp"\s*:\s*"(-?\d+\.?\d*)"',
+          ).firstMatch(jsonStr);
 
           if (iMatch != null) {
             integratedLoudness = double.tryParse(iMatch.group(1)!);
