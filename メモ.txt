@@ -1,0 +1,16 @@
+音楽の再生状態、秒数は極力Media/MusicPlayerControllerが持って管理しやすいように
+
+lib\screens\music_list_screen.dartlib\screens\music_list_screen.dart
+
+music→mediaの画面切り替え時
+mediaが過去に再生中であった
+    musicを止めて
+    mediaの最後の状態を復元して
+mediaが過去に停止中であった
+    そのままmusicを流し続けて
+
+music再生中にmediaの再生を初めた
+musicの再生を止めてmediaの再生を初めて
+再度musicの画面に移動したときに自動で最後のmusicの状態に戻るように
+
+上記を逆のバージョンも対象にできるようにして

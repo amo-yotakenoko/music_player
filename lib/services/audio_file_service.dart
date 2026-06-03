@@ -48,6 +48,7 @@ class AudioFileService {
         );
 
         await Future.wait(musicFiles.map((m) => m.loadTags()));
+        print("${musicFiles.length} 剣読み込み");
         return musicFiles;
       } else {
         debugPrint('音楽フォルダが見つかりませんでした: ${musicDir?.path}');

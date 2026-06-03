@@ -5,6 +5,7 @@ import 'package:just_audio/just_audio.dart';
 import 'package:path/path.dart' as p;
 import '../classes/music.dart';
 import '../services/audio_file_service.dart';
+import '../services/playback_service.dart';
 import 'package:flutter_spinbox/flutter_spinbox.dart';
 import 'package:diffutil_dart/diffutil.dart' as diffutil;
 
@@ -53,8 +54,8 @@ class ShuffleConfig {
 
 /// 【ロジック・状態管理層】
 class MusicPlayerController extends ChangeNotifier {
-  static final AudioPlayer _audioPlayer = AudioPlayer();
-  static MusicPlayerController? activeMusicPlayerController;
+  final PlaybackService _playbackService = PlaybackService();
+  final SessionType sessionType;
 
   void Function()? playcallBack;
 
@@ -65,61 +66,38 @@ class MusicPlayerController extends ChangeNotifier {
   List<MusicFile> allLoadedFiles = [];
   @protected
   bool isLoading = false;
-  @protected
-  MusicFile? _selectedMusic;
-  @protected
-  bool _isPlaying = false;
-  @protected
-  double _playbackSpeed = 1.0;
-  @protected
-  final ValueNotifier<Duration> _position = ValueNotifier(Duration.zero);
-  @protected
-  final ValueNotifier<Duration> _duration = ValueNotifier(Duration.zero);
 
   // --- 外部公開用のゲッター ---
   List<MusicFile> get musicFiles => playQueue;
   List<MusicFile> get allMusicFiles => allLoadedFiles;
-  MusicFile? get selectedMusic => _selectedMusic;
-  bool get isPlaying => _isPlaying;
-  double get playbackSpeed => _playbackSpeed;
-  ValueNotifier<Duration> get positionNotifier => _position;
-  ValueNotifier<Duration> get durationNotifier => _duration;
-  Duration get position => _position.value;
-  Duration get duration => _duration.value;
+  
+  // PlaybackServiceのセッションに委譲
+  PlaybackSession get _session => _playbackService.getSession(sessionType);
+  MusicFile? get selectedMusic => _session.selectedMusic;
+  // 実際にプレイヤーがこのセッションタイプを鳴らしているかどうかで判定
+  bool get isPlaying => _session.isPlaying && _playbackService.playingType == sessionType;
+  double get playbackSpeed => _session.playbackSpeed;
+  
+  // 通知用 (サービスが持っているNotifierを直接返す)
+  ValueNotifier<Duration> get positionNotifier => _session.position;
+  ValueNotifier<Duration> get durationNotifier => _session.duration;
+  Duration get position => _session.position.value;
+  Duration get duration => _session.duration.value;
 
-  // イベント購読用
-  StreamSubscription? _posSub;
-  StreamSubscription? _durSub;
-  StreamSubscription? _stateSub;
-  StreamSubscription? _compSub;
+  StreamSubscription? _serviceSub;
 
-  Map<String, ShuffleConfig> shuffleConfig = {
-    'A': ShuffleConfig(name: 'A', frequency: 1),
-    'B': ShuffleConfig(name: 'B', frequency: 0),
-    'C': ShuffleConfig(name: 'C', frequency: 0),
-    '配信A': ShuffleConfig(name: '配信A', frequency: 0),
-    '配信B': ShuffleConfig(name: '配信B', frequency: 0),
-  };
-
-  DateTime? filterDate;
-
-  MusicPlayerController() {
+  MusicPlayerController({this.sessionType = SessionType.music}) {
     _init();
   }
 
   void _init() {
-    _posSub = _audioPlayer.positionStream.listen((p) {
-      _position.value = p;
-    });
-    _durSub = _audioPlayer.durationStream.listen((d) {
-      if (d != null) _duration.value = d;
-    });
-    _stateSub = _audioPlayer.playerStateStream.listen((state) {
-      _isPlaying = state.playing;
-      notifyListeners();
-    });
-    _compSub = _audioPlayer.processingStateStream.listen((state) {
-      if (state == ProcessingState.completed) {
+    // サービスからの通知（isPlayingの切り替えなど）を全体に通知
+    _playbackService.addListener(notifyListeners);
+
+    // プレイヤー本体の完了イベント
+    _playbackService.player.processingStateStream.listen((state) {
+      if (_playbackService.playingType == sessionType &&
+          state == ProcessingState.completed) {
         playNext();
       }
     });
@@ -127,11 +105,8 @@ class MusicPlayerController extends ChangeNotifier {
 
   @override
   void dispose() {
-    _posSub?.cancel();
-    _durSub?.cancel();
-    _stateSub?.cancel();
-    _compSub?.cancel();
-    _audioPlayer.dispose();
+    _playbackService.removeListener(notifyListeners);
+    _serviceSub?.cancel();
     super.dispose();
   }
 
@@ -140,7 +115,9 @@ class MusicPlayerController extends ChangeNotifier {
   Future<void> loadFiles() async {
     isLoading = true;
     notifyListeners();
-    final files = await AudioFileService.loadMusicFiles();
+    final files = await AudioFileService.loadMusicFiles(
+      libraryTypeFilter: sessionType == SessionType.media ? LibraryType.media : LibraryType.music,
+    );
     allLoadedFiles = List<MusicFile>.from(files);
     playQueue = files;
     isLoading = false;
@@ -152,263 +129,21 @@ class MusicPlayerController extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future<void> addToQueueAndPlay(MusicFile music) async {
-    final existingIndex = playQueue.indexWhere(
-      (item) => item.path == music.path,
-    );
-    final playTarget = existingIndex == -1
-        ? MusicFile.from(music)
-        : playQueue[existingIndex];
-
-    if (existingIndex == -1) {
-      playQueue.add(playTarget);
-      notifyListeners();
-    }
-
-    _selectedMusic = playTarget;
-    notifyListeners();
-    await play(playTarget);
-  }
-
   Future<void> play(MusicFile music) async {
-    activeMusicPlayerController = this;
-
-    _selectedMusic = music;
-    notifyListeners();
-    await _audioPlayer.stop();
-
-    // 再生開始前にキャッシュから音量を読み込んで設定（あれば即座に適用）
-    await music.loadVolumeFromCache();
-    if (music.integratedLoudness != null) {
-      print("キャッシュから音量を適用: ${music.adjustedVolume}");
-      await _audioPlayer.setVolume(music.adjustedVolume);
-    } else {
-      // 未計測の場合は一旦デフォルト音量（例: 0.8）に設定
-      await _audioPlayer.setVolume(0.8);
-    }
-
-    // just_audio using AudioSource for background support
-    final source = AudioSource.uri(
-      Uri.file(music.path),
-      tag: music.toMediaItem(),
-    );
-    await _audioPlayer.setAudioSource(source);
-    _audioPlayer.play();
+    await _playbackService.play(sessionType, music);
     playcallBack?.call();
-
-    // 音量計測（キャッシュになければFFmpeg実行）
-    if (music.integratedLoudness == null) {
-      await music.detectVolume();
-      print("計測後に音量を適用: ${music.title}: ${music.adjustedVolume}");
-      await _audioPlayer.setVolume(music.adjustedVolume);
-    }
-
-    await _audioPlayer.setSpeed(_playbackSpeed);
-  }
-
-  Future<void> setPlaybackSpeed(double speed) async {
-    _playbackSpeed = speed;
-    await _audioPlayer.setSpeed(speed);
-    notifyListeners();
-  }
-
-  void setMusicFiles() async {
-    print("再ロード開始");
-
-    notifyListeners();
-
-    // 1) 端末内の全音楽ファイルをロードし、新しいフォルダがあれば設定に追加
-    List<MusicFile> musicfiles = await AudioFileService.loadMusicFiles();
-    if (musicfiles.isEmpty) {
-      print('No music files found.');
-      return;
-    }
-
-    // Filter by date if filterDate is set
-    if (filterDate != null) {
-      final startOfDay = DateTime(
-        filterDate!.year,
-        filterDate!.month,
-        filterDate!.day,
-      );
-      musicfiles = musicfiles.where((f) {
-        return f.modified != null &&
-            (f.modified!.isAfter(startOfDay) ||
-                f.modified!.isAtSameMomentAs(startOfDay));
-      }).toList();
-    }
-
-    if (musicfiles.isEmpty) {
-      print('No music files found after filtering.');
-      return;
-    }
-
-    final allDirs = musicfiles.map((x) => p.basename(x.directory)).toSet();
-    bool configChanged = false;
-    for (final dir in allDirs) {
-      if (!shuffleConfig.containsKey(dir)) {
-        shuffleConfig[dir] = ShuffleConfig(name: dir, frequency: 0);
-        configChanged = true;
-      }
-    }
-    if (configChanged) {
-      notifyListeners();
-    }
-
-    // ディレクトリごとにファイルを分類して設定に応じてソートまたはシャッフル
-    final Map<String, List<MusicFile>> dirToFiles = {};
-    for (final f in musicfiles) {
-      final d = p.basename(f.directory);
-      dirToFiles.putIfAbsent(d, () => []).add(f);
-    }
-
-    for (final entry in dirToFiles.entries) {
-      final dirName = entry.key;
-      final list = entry.value;
-      final config = shuffleConfig[dirName];
-
-      if (config != null && config.shuffle) {
-        // シャッフルがオンならランダムに
-        list.shuffle();
-      } else {
-        // シャッフルがオフなら日付の新しい順に並べる
-        list.sort((a, b) {
-          final dateA = a.modified ?? DateTime(0);
-          final dateB = b.modified ?? DateTime(0);
-          return dateB.compareTo(dateA); // 新しい順
-        });
-      }
-    }
-
-    // 2) 現在の再生キューとターゲットのディレクトリ順を比較して差分を計算
-    final targetDirs = dirIter().take(100).toList();
-    final nowDirs = playQueue.map((x) => p.basename(x.directory)).toList();
-    final diffResult = diffutil.calculateListDiff(nowDirs, targetDirs);
-    final updates = diffResult.getUpdatesWithData();
-
-    print(
-      'Updating queue: target length ${targetDirs.length}, current length ${nowDirs.length}',
-    );
-
-    final queue = List<MusicFile>.from(playQueue);
-
-    // 重複回避のためのトラッキング
-    final Set<String> usedPathsInQueue = queue.map((m) => m.path).toSet();
-    final Map<String, int> dirPoolIndices = {};
-
-    for (final update in updates) {
-      if (update is diffutil.DataInsert<String>) {
-        final dirName = update.data;
-        final files = dirToFiles[dirName] ?? musicfiles;
-
-        MusicFile? selected;
-
-        // 1. 未使用の曲（パス）を優先的に探す
-        int startIdx = dirPoolIndices[dirName] ?? 0;
-        for (int i = 0; i < files.length; i++) {
-          int currentIdx = (startIdx + i) % files.length;
-          final f = files[currentIdx];
-          if (!usedPathsInQueue.contains(f.path)) {
-            selected = f;
-            dirPoolIndices[dirName] = (currentIdx + 1) % files.length;
-            break;
-          }
-        }
-
-        // 2. 全て使用済みなら、前後と被らないものを探す
-        if (selected == null) {
-          for (int i = 0; i < files.length; i++) {
-            int currentIdx = (startIdx + i) % files.length;
-            final f = files[currentIdx];
-
-            final prevPath = update.position > 0
-                ? queue[update.position - 1].path
-                : null;
-            final nextPath = update.position < queue.length
-                ? queue[update.position].path
-                : null;
-
-            if (f.path != prevPath && f.path != nextPath) {
-              selected = f;
-              dirPoolIndices[dirName] = (currentIdx + 1) % files.length;
-              break;
-            }
-          }
-        }
-
-        // 3. どうしても見つからなければ順番通りに出す
-        if (selected == null) {
-          int currentIdx = startIdx % files.length;
-          selected = files[currentIdx];
-          dirPoolIndices[dirName] = (currentIdx + 1) % files.length;
-        }
-
-        final newFile = MusicFile.from(selected);
-        queue.insert(update.position, newFile);
-        usedPathsInQueue.add(newFile.path);
-      } else if (update is diffutil.DataRemove<String>) {
-        if (queue[update.position] == _selectedMusic) {
-          // 現在再生中の曲を削除しようとしている場合、同じディレクトリの別の曲があれば入れ替えて保護する
-          int altIdx = -1;
-          for (int i = 0; i < queue.length; i++) {
-            if (i != update.position &&
-                queue[i].directory == queue[update.position].directory &&
-                queue[i] != _selectedMusic) {
-              altIdx = i;
-              break;
-            }
-          }
-          if (altIdx != -1) {
-            final temp = queue[update.position];
-            queue[update.position] = queue[altIdx];
-            queue[altIdx] = temp;
-          } else {
-            // 他に同じディレクトリの曲がない場合は、再生中の曲を「削除」せず、
-            // この更新ステップをスキップすることで保護する。
-            // インデックスのズレが発生するが、再生継続を優先。
-            continue;
-          }
-        }
-        final removed = queue.removeAt(update.position);
-        usedPathsInQueue.remove(removed.path);
-      } else if (update is diffutil.DataMove<String>) {
-        final item = queue.removeAt(update.from);
-        queue.insert(update.to, item);
-      }
-    }
-
-    playQueue = queue;
-
-    // 検証
-    final finalDirs = playQueue.map((x) => p.basename(x.directory)).toList();
-    bool isMatch = finalDirs.length == targetDirs.length;
-    if (isMatch) {
-      for (int i = 0; i < finalDirs.length; i++) {
-        if (finalDirs[i] != targetDirs[i]) {
-          isMatch = false;
-          break;
-        }
-      }
-    }
-    print(
-      'Queue sync complete. Match target: $isMatch, Final length: ${finalDirs.length}',
-    );
-
-    notifyListeners();
   }
 
   /// 指定した曲をキューの現在の位置に挿入（または移動）して即座に再生する
   Future<void> playNow(MusicFile music) async {
     final index = playQueue.indexWhere((m) => m.path == music.path);
     if (index != -1) {
-      // 既存なら削除
       playQueue.removeAt(index);
     }
 
-    // 現在の曲の次（または先頭）に挿入
     int insertIdx = 0;
-    if (_selectedMusic != null) {
-      final currentIdx = playQueue.indexOf(_selectedMusic!);
+    if (selectedMusic != null) {
+      final currentIdx = playQueue.indexWhere((m) => m.path == selectedMusic!.path);
       if (currentIdx != -1) {
         insertIdx = currentIdx;
       }
@@ -416,7 +151,6 @@ class MusicPlayerController extends ChangeNotifier {
 
     final newFile = MusicFile.from(music);
     playQueue.insert(insertIdx, newFile);
-    _selectedMusic = newFile;
     notifyListeners();
     await play(newFile);
   }
@@ -429,8 +163,8 @@ class MusicPlayerController extends ChangeNotifier {
     }
 
     int insertIdx = 0;
-    if (_selectedMusic != null) {
-      final currentIdx = playQueue.indexOf(_selectedMusic!);
+    if (selectedMusic != null) {
+      final currentIdx = playQueue.indexWhere((m) => m.path == selectedMusic!.path);
       if (currentIdx != -1) {
         insertIdx = currentIdx + 1;
       }
@@ -441,81 +175,145 @@ class MusicPlayerController extends ChangeNotifier {
     notifyListeners();
   }
 
-  Iterable<String> dirIter() sync* {
-    // 1. 設定から有効な（頻度が1以上の）フォルダだけを抽出
-    final activeConfigs = shuffleConfig.entries
-        .where((e) => e.value.frequency > 0)
-        .toList();
+  Future<void> setPlaybackSpeed(double speed) async {
+    await _playbackService.setSpeed(speed);
+    notifyListeners();
+  }
 
-    if (activeConfigs.isEmpty) return;
+  Map<String, ShuffleConfig> shuffleConfig = {
+    'A': ShuffleConfig(name: 'A', frequency: 1),
+    'B': ShuffleConfig(name: 'B', frequency: 0),
+    'C': ShuffleConfig(name: 'C', frequency: 0),
+    '配信A': ShuffleConfig(name: '配信A', frequency: 0),
+    '配信B': ShuffleConfig(name: '配信B', frequency: 0),
+  };
 
-    // 2. 合計頻度を計算
-    final totalFrequency = activeConfigs.fold<int>(
-      0,
-      (sum, e) => sum + e.value.frequency,
+  DateTime? filterDate;
+
+  void setMusicFiles() async {
+    print("再ロード開始");
+    notifyListeners();
+
+    List<MusicFile> musicfiles = await AudioFileService.loadMusicFiles(
+      libraryTypeFilter: sessionType == SessionType.media ? LibraryType.media : LibraryType.music,
     );
+    if (musicfiles.isEmpty) return;
 
-    // 3. 各フォルダの「出番待ち状態」を管理するカウンター（初期値は0）
-    final Map<String, double> counters = {
-      for (var e in activeConfigs) e.value.name: 0.0,
-    };
+    if (filterDate != null) {
+      final startOfDay = DateTime(filterDate!.year, filterDate!.month, filterDate!.day);
+      musicfiles = musicfiles.where((f) {
+        return f.modified != null && (f.modified!.isAfter(startOfDay) || f.modified!.isAtSameMomentAs(startOfDay));
+      }).toList();
+    }
 
-    while (true) {
-      // 4. 全てのフォルダのカウンターに、それぞれの「出現割合」を加算する
-      for (var entry in activeConfigs) {
-        final name = entry.value.name;
-        final freq = entry.value.frequency;
-        // 頻度を全体で割った値を足していく（例：Aが3、Cが2なら、Aには0.6、Cには0.4ずつ溜まる）
-        counters[name] = counters[name]! + (freq / totalFrequency);
+    if (musicfiles.isEmpty) return;
+
+    final allDirs = musicfiles.map((x) => p.basename(x.directory)).toSet();
+    bool configChanged = false;
+    for (final dir in allDirs) {
+      if (!shuffleConfig.containsKey(dir)) {
+        shuffleConfig[dir] = ShuffleConfig(name: dir, frequency: 0);
+        configChanged = true;
       }
+    }
+    if (configChanged) notifyListeners();
 
-      // 5. カウンターが最大（最も「溜まっている」）フォルダを探す
+    final Map<String, List<MusicFile>> dirToFiles = {};
+    for (final f in musicfiles) {
+      final d = p.basename(f.directory);
+      dirToFiles.putIfAbsent(d, () => []).add(f);
+    }
+
+    for (final entry in dirToFiles.entries) {
+      final dirName = entry.key;
+      final list = entry.value;
+      final config = shuffleConfig[dirName];
+      if (config != null && config.shuffle) {
+        list.shuffle();
+      } else {
+        list.sort((a, b) => (b.modified ?? DateTime(0)).compareTo(a.modified ?? DateTime(0)));
+      }
+    }
+
+    final targetDirs = dirIter().take(100).toList();
+    final nowDirs = playQueue.map((x) => p.basename(x.directory)).toList();
+    final diffResult = diffutil.calculateListDiff(nowDirs, targetDirs);
+    final updates = diffResult.getUpdatesWithData();
+
+    final queue = List<MusicFile>.from(playQueue);
+    final Set<String> usedPathsInQueue = queue.map((m) => m.path).toSet();
+    final Map<String, int> dirPoolIndices = {};
+
+    for (final update in updates) {
+      if (update is diffutil.DataInsert<String>) {
+        final dirName = update.data;
+        final files = dirToFiles[dirName] ?? musicfiles;
+        MusicFile? selected;
+        int startIdx = dirPoolIndices[dirName] ?? 0;
+        for (int i = 0; i < files.length; i++) {
+          int currentIdx = (startIdx + i) % files.length;
+          if (!usedPathsInQueue.contains(files[currentIdx].path)) {
+            selected = files[currentIdx];
+            dirPoolIndices[dirName] = (currentIdx + 1) % files.length;
+            break;
+          }
+        }
+        if (selected == null) selected = files[startIdx % files.length];
+        final newFile = MusicFile.from(selected);
+        queue.insert(update.position, newFile);
+        usedPathsInQueue.add(newFile.path);
+      } else if (update is diffutil.DataRemove<String>) {
+        if (queue[update.position] == selectedMusic) continue;
+        final removed = queue.removeAt(update.position);
+        usedPathsInQueue.remove(removed.path);
+      } else if (update is diffutil.DataMove<String>) {
+        final item = queue.removeAt(update.from);
+        queue.insert(update.to, item);
+      }
+    }
+
+    playQueue = queue.take(20).toList();
+    notifyListeners();
+  }
+
+  Iterable<String> dirIter() sync* {
+    final activeConfigs = shuffleConfig.entries.where((e) => e.value.frequency > 0).toList();
+    if (activeConfigs.isEmpty) return;
+    final totalFrequency = activeConfigs.fold<int>(0, (sum, e) => sum + e.value.frequency);
+    final Map<String, double> counters = {for (var e in activeConfigs) e.value.name: 0.0};
+    while (true) {
+      for (var entry in activeConfigs) {
+        counters[entry.value.name] = counters[entry.value.name]! + (entry.value.frequency / totalFrequency);
+      }
       String bestName = activeConfigs.first.value.name;
       double maxVal = -1.0;
-
       counters.forEach((name, val) {
         if (val > maxVal) {
           maxVal = val;
           bestName = name;
         }
       });
-
-      // 6. 選ばれたフォルダ名を出力（yield）
       yield bestName;
-
-      // 7. 出力したフォルダのカウンターを 1 減らす
       counters[bestName] = counters[bestName]! - 1.0;
     }
   }
 
   Future<void> togglePlayPause() async {
-    if (_isPlaying) {
-      await _audioPlayer.pause();
-    } else {
-      await _audioPlayer.play();
-      playcallBack?.call();
-    }
+    await _playbackService.togglePlayPause();
   }
 
   Future<void> seek(Duration pos) async {
-    await _audioPlayer.seek(pos);
-  }
-
-  Future<void> skipSeconds(int seconds) async {
-    final currentPos = _audioPlayer.position;
-    final newPos = currentPos + Duration(seconds: seconds);
-    await _audioPlayer.seek(newPos);
+    await _playbackService.seek(pos);
   }
 
   Future<void> timeSkip(int time) async {
-    final currentPosition = _audioPlayer.position;
-    final targetPosition = currentPosition + Duration(seconds: time);
-    await _audioPlayer.seek(targetPosition);
+    final targetPosition = _session.position.value + Duration(seconds: time);
+    await _playbackService.seek(targetPosition);
   }
 
   void playNext() {
-    if (playQueue.isEmpty || _selectedMusic == null) return;
-    final index = playQueue.indexOf(_selectedMusic!);
+    if (playQueue.isEmpty || selectedMusic == null) return;
+    final index = playQueue.indexWhere((m) => m.path == selectedMusic!.path);
     final nextIndex = (index + 1) % playQueue.length;
     play(playQueue[nextIndex]);
   }
@@ -542,14 +340,14 @@ class MusicPlayerController extends ChangeNotifier {
   }
 
   void moveMusicNext(int index) {
-    final now = playQueue.indexOf(_selectedMusic!);
+    final now = playQueue.indexWhere((m) => m.path == selectedMusic?.path);
     final item = playQueue.removeAt(index);
     playQueue.insert(now + 1, item);
     notifyListeners();
   }
 
   void removeMusic(MusicFile music) {
-    playQueue.remove(music);
+    playQueue.removeWhere((m) => m.path == music.path);
     notifyListeners();
   }
 
@@ -560,17 +358,8 @@ class MusicPlayerController extends ChangeNotifier {
         title: const Text('ファイルの削除'),
         content: Text('${music.title} をストレージから完全に削除しますか？'),
         actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('キャンセル'),
-          ),
-          TextButton(
-            onPressed: () => Navigator.pop(context, true),
-            child: const Text(
-              '削除',
-              style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold),
-            ),
-          ),
+          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('キャンセル')),
+          TextButton(onPressed: () => Navigator.pop(context, true), child: const Text('削除', style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold))),
         ],
       ),
     );
@@ -578,78 +367,14 @@ class MusicPlayerController extends ChangeNotifier {
     if (confirmed == true) {
       removeMusic(music);
       final file = File(music.path);
-      if (await file.exists()) {
-        await file.delete();
-      }
+      if (await file.exists()) await file.delete();
       if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text("${music.title} をストレージから削除しました")),
-        );
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("${music.title} をストレージから削除しました")));
       }
     }
   }
 
-  /// 現在の再生状態を保存
-  MusicPlayerState savePlayerState() {
-    return MusicPlayerState(
-      selectedMusic: _selectedMusic,
-      position: _position.value,
-      isPlaying: _isPlaying,
-      playbackSpeed: _playbackSpeed,
-    );
-  }
-
-  /// 保存された再生状態を復元
-  Future<void> restorePlayerState(MusicPlayerState state) async {
-    final music = state.selectedMusic;
-    if (music == null) return;
-
-    _selectedMusic = music;
-    _playbackSpeed = state.playbackSpeed;
-    notifyListeners();
-
-    // プレイヤーの初期設定
-    await music.loadVolumeFromCache();
-    await _audioPlayer.setVolume(music.adjustedVolume ?? 0.8);
-    await _audioPlayer.setSpeed(_playbackSpeed);
-
-    final source = AudioSource.uri(
-      Uri.file(music.path),
-      tag: music.toMediaItem(),
-    );
-
-    // 指定された位置から読み込み
-    await _audioPlayer.setAudioSource(source, initialPosition: state.position);
-
-    if (state.isPlaying) {
-      _audioPlayer.play();
-      playcallBack?.call();
-    } else {
-      _audioPlayer.pause();
-    }
-  }
-
-  /// 保存された再生状態をUIに反映（プレイヤーの再ロードは行わない）
-  void importState(MusicPlayerState state) {
-    _selectedMusic = state.selectedMusic;
-    _playbackSpeed = state.playbackSpeed;
-    // position, isPlaying, durationはstaticな_audioPlayerを通じて同期されているため、
-    // ここで明示的に代入する必要はありません。
-    notifyListeners();
-  }
-}
-
-/// プレイヤーの状態を保持するためのクラス
-class MusicPlayerState {
-  final MusicFile? selectedMusic;
-  final Duration position;
-  final bool isPlaying;
-  final double playbackSpeed;
-
-  MusicPlayerState({
-    this.selectedMusic,
-    this.position = Duration.zero,
-    this.isPlaying = false,
-    this.playbackSpeed = 1.0,
-  });
+  // 互換性のためのダミー
+  void saveState() {}
+  Future<void> restorePlayerState() async {}
 }

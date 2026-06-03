@@ -21,75 +21,73 @@ class MusicListBody extends StatefulWidget {
 }
 
 class _MusicListBodyState extends State<MusicListBody> {
-  static List<MusicListBody> _instances = [];
-
   @override
   void initState() {
     super.initState();
-    _instances.add(widget);
-    widget.controller.playcallBack = _playCallBack;
-  }
-
-  void _playCallBack() {
-    print("playCallBack: ${widget.controller.selectedMusic?.title}");
   }
 
   @override
   void dispose() {
-    _instances.remove(widget);
     super.dispose();
-  }
-
-  void screenUpdate(bool isActive) {
-    print("screenUpdate: $isActive");
   }
 
   @override
   Widget build(BuildContext context) {
-    if (widget.controller.isLoading) {
-      return const Center(child: CircularProgressIndicator());
-    }
+    return ListenableBuilder(
+      listenable: widget.controller,
+      builder: (context, _) {
+        if (widget.controller.isLoading) {
+          return const Center(child: CircularProgressIndicator());
+        }
 
-    if (widget.controller.musicFiles.isEmpty) {
-      return _buildEmptyView();
-    }
+        if (widget.controller.musicFiles.isEmpty) {
+          return _buildEmptyView();
+        }
 
-    return ReorderableListView.builder(
-      // ドラッグ中の見た目を最適化（別のレイヤーで描画して軽くする）
-      proxyDecorator: (child, index, animation) {
-        return AnimatedBuilder(
-          animation: animation,
-          builder: (context, _) {
-            return Material(
-              elevation: 4.0,
-              color: Colors.white.withOpacity(0.8),
-              child: child,
+        return ReorderableListView.builder(
+          // ドラッグ中の見た目を最適化（別のレイヤーで描画して軽くする）
+          proxyDecorator: (child, index, animation) {
+            return AnimatedBuilder(
+              animation: animation,
+              builder: (context, _) {
+                return Material(
+                  elevation: 4.0,
+                  color: Colors.white.withOpacity(0.8),
+                  child: child,
+                );
+              },
             );
           },
-        );
-      },
-      itemCount: widget.controller.musicFiles.length,
-      onReorder: widget.controller.reorder,
-      itemBuilder: (context, index) {
-        final music = widget.controller.musicFiles[index];
-        return MusicTile(
-          key: music.key,
-          music: music,
-          onTap: () => widget.controller.play(music),
-          // onTap: () => () {},
-          onMenuPressed: () {
-            _openItemModal(context, index, music, widget.controller);
+          itemCount: widget.controller.musicFiles.length,
+          onReorder: widget.controller.reorder,
+          itemBuilder: (context, index) {
+            final music = widget.controller.musicFiles[index];
+            return MusicTile(
+              key: music.key,
+              music: music,
+              onTap: () {
+                // すでに再生中の場合は何もしない（誤タップ防止）
+                if (widget.controller.selectedMusic?.path == music.path &&
+                    widget.controller.isPlaying) {
+                  return;
+                }
+                widget.controller.play(music);
+              },
+              onMenuPressed: () {
+                _openItemModal(context, index, music, widget.controller);
+              },
+              // ドラッグがあるので、ボタンでの移動はオプションとして残す
+              onMoveUp: index > 0
+                  ? () => widget.controller.moveMusicUp(index)
+                  : null,
+              onMoveDown: index < widget.controller.musicFiles.length - 1
+                  ? () => widget.controller.moveMusicDown(index)
+                  : null,
+              isPlaying:
+                  widget.controller.selectedMusic?.path == music.path &&
+                  widget.controller.isPlaying,
+            );
           },
-          // ドラッグがあるので、ボタンでの移動はオプションとして残す
-          onMoveUp: index > 0
-              ? () => widget.controller.moveMusicUp(index)
-              : null,
-          onMoveDown: index < widget.controller.musicFiles.length - 1
-              ? () => widget.controller.moveMusicDown(index)
-              : null,
-          isPlaying:
-              widget.controller.selectedMusic?.path == music.path &&
-              widget.controller.isPlaying,
         );
       },
     );
