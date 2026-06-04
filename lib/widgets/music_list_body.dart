@@ -1,8 +1,9 @@
 import 'package:flutter/material.dart';
 import '../controllers/music_player_controller.dart';
 import 'music_tile.dart';
-
 import '../classes/music.dart';
+import '../services/playback_service.dart';
+import '../screens/media_player_screen.dart';
 
 /// 【表示部品層（ボディ）】
 /// 読み込み中、空、リスト表示の切り替えロジックを担当。
@@ -65,13 +66,28 @@ class _MusicListBodyState extends State<MusicListBody> {
             return MusicTile(
               key: music.key,
               music: music,
-              onTap: () {
-                // すでに再生中の場合は何もしない（誤タップ防止）
-                if (widget.controller.selectedMusic?.path == music.path &&
-                    widget.controller.isPlaying) {
-                  return;
+              onTap: () async {
+                if (widget.controller.sessionType == SessionType.media) {
+                  // Mediaの場合は再生を開始して詳細画面へ
+                  await widget.controller.play(music);
+                  if (context.mounted) {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => MediaPlayerScreen(
+                          controller: widget.controller,
+                        ),
+                      ),
+                    );
+                  }
+                } else {
+                  // Musicの場合は従来通り（すでに再生中なら何もしない）
+                  if (widget.controller.selectedMusic?.path == music.path &&
+                      widget.controller.isPlaying) {
+                    return;
+                  }
+                  widget.controller.play(music);
                 }
-                widget.controller.play(music);
               },
               onMenuPressed: () {
                 _openItemModal(context, index, music, widget.controller);

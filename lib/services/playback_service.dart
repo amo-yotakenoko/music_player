@@ -64,6 +64,15 @@ class PlaybackService extends ChangeNotifier {
     _audioPlayer.playerStateStream.listen((state) {
       if (_isTransitioning) return;
       playingSession.isPlaying = state.playing;
+      
+      // 再生が止まった（ポーズされた）タイミングで進捗を保存
+      if (!state.playing && playingSession.selectedMusic != null) {
+        playingSession.selectedMusic!.saveProgress(
+          _audioPlayer.position,
+          totalDuration: _audioPlayer.duration,
+        );
+      }
+      
       notifyListeners(); 
     });
     _audioPlayer.speedStream.listen((speed) {
@@ -92,10 +101,21 @@ class PlaybackService extends ChangeNotifier {
 
   /// 曲を再生する
   Future<void> play(SessionType type, MusicFile music) async {
+    // 現在の曲の進捗を保存してから切り替える
+    if (playingSession.selectedMusic != null) {
+      await playingSession.selectedMusic!.saveProgress(
+        _audioPlayer.position,
+        totalDuration: _audioPlayer.duration,
+      );
+    }
+
     final session = _sessions[type]!;
     session.selectedMusic = music;
     session.isPlaying = true;
-    session.resetProgress(); 
+    
+    // 保存されていた進捗を読み込む
+    final savedPosition = await music.loadProgress();
+    session.position.value = savedPosition;
 
     await _loadAndPlay(type, session);
     notifyListeners();
@@ -139,6 +159,12 @@ class PlaybackService extends ChangeNotifier {
 
   Future<void> togglePlayPause() async {
     if (_audioPlayer.playing) {
+      if (playingSession.selectedMusic != null) {
+        await playingSession.selectedMusic!.saveProgress(
+          _audioPlayer.position,
+          totalDuration: _audioPlayer.duration,
+        );
+      }
       await _audioPlayer.pause();
     } else {
       await _audioPlayer.play();
@@ -147,6 +173,13 @@ class PlaybackService extends ChangeNotifier {
 
   Future<void> seek(Duration pos) async {
     await _audioPlayer.seek(pos);
+    // シーク後も保存しておく
+    if (playingSession.selectedMusic != null) {
+      playingSession.selectedMusic!.saveProgress(
+        pos,
+        totalDuration: _audioPlayer.duration,
+      );
+    }
   }
 
   Future<void> setSpeed(double speed) async {

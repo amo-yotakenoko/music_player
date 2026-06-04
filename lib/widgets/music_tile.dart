@@ -31,6 +31,16 @@ class MusicTile extends StatelessWidget {
     required this.isPlaying,
   });
 
+  String _formatDuration(Duration duration) {
+    String twoDigits(int n) => n.toString().padLeft(2, '0');
+    final minutes = twoDigits(duration.inMinutes.remainder(60));
+    final seconds = twoDigits(duration.inSeconds.remainder(60));
+    if (duration.inHours > 0) {
+      return "${duration.inHours}:$minutes:$seconds";
+    }
+    return "$minutes:$seconds";
+  }
+
   @override
   Widget build(BuildContext context) {
     final dirName = p.basename(music.directory);
@@ -105,14 +115,12 @@ class MusicTile extends StatelessWidget {
                     onMoveDown?.call();
                     music_list_move(context, 1);
                   },
-
                   child: const Icon(Icons.arrow_drop_down, size: 20),
                 ),
               ],
             ),
           ],
         ),
-
         title: Text(
           music.title,
           style: TextStyle(
@@ -122,11 +130,34 @@ class MusicTile extends StatelessWidget {
             overflow: TextOverflow.ellipsis,
           ),
         ),
-        subtitle: Text(
-          music.artist ?? "Unknown Artist",
-          style: const TextStyle(fontSize: 10),
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
+        subtitle: FutureBuilder<List<dynamic>>(
+          future: Future.wait([music.loadProgress(), music.loadTotalDuration()]),
+          builder: (context, snapshot) {
+            final artistText = music.artist ?? "Unknown Artist";
+            if (!snapshot.hasData) {
+              return Text(
+                artistText,
+                style: const TextStyle(fontSize: 10),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              );
+            }
+
+            final progress = snapshot.data![0] as Duration;
+            final total = snapshot.data![1] as Duration?;
+
+            String timeInfo = "";
+            if (total != null && total > Duration.zero) {
+              timeInfo = " [${_formatDuration(progress)} / ${_formatDuration(total)}]";
+            }
+
+            return Text(
+              "$artistText$timeInfo",
+              style: const TextStyle(fontSize: 10),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            );
+          },
         ),
       ),
     );

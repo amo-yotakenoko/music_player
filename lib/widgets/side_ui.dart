@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:music_player/screens/media_screen.dart';
 import '../controllers/music_player_controller.dart';
 import './side_ui_mix_custum.dart';
 
@@ -35,16 +34,6 @@ class SideUI extends StatelessWidget {
                 ),
               ),
             ],
-            ElevatedButton(
-              onPressed: () {
-                print("押された");
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(builder: (context) => const MediaScreen()),
-                );
-              },
-              child: Text("配信"),
-            ),
           ],
         ),
       ),

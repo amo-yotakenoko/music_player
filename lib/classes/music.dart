@@ -87,6 +87,36 @@ class MusicFile {
     }
   }
 
+  /// 再生進捗を保存する
+  Future<void> saveProgress(Duration position, {Duration? totalDuration}) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setInt('${path}_progress', position.inMilliseconds);
+    if (totalDuration != null) {
+      await prefs.setInt('${path}_duration', totalDuration.inMilliseconds);
+    }
+    print("進捗を保存: $title -> ${position.inSeconds}秒 / ${totalDuration?.inSeconds}秒");
+  }
+
+  /// 再生進捗を読み込む
+  Future<Duration> loadProgress() async {
+    final prefs = await SharedPreferences.getInstance();
+    int? ms = prefs.getInt('${path}_progress');
+    if (ms != null) {
+      return Duration(milliseconds: ms);
+    }
+    return Duration.zero;
+  }
+
+  /// 合計時間を読み込む
+  Future<Duration?> loadTotalDuration() async {
+    final prefs = await SharedPreferences.getInstance();
+    int? ms = prefs.getInt('${path}_duration');
+    if (ms != null) {
+      return Duration(milliseconds: ms);
+    }
+    return null;
+  }
+
   /// FFmpegのloudnormフィルターを使用して音量を検出する
   Future<void> detectVolume() async {
     if (integratedLoudness != null) {
