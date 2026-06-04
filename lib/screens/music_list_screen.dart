@@ -6,6 +6,7 @@ import '../widgets/upside_config.dart';
 import '../widgets/side_ui.dart';
 import '../controllers/media_player_controller.dart';
 import '../services/playback_service.dart';
+import '../widgets/media_progress.dart';
 
 /// 【表示層（メイン画面）】
 /// 画面の全体構造（Scaffold）のみを定義し、具体的な中身やロジックは他に任せる。
@@ -63,10 +64,7 @@ class _MusicListScreenState extends State<MusicListScreen> {
         children: [
           Row(
             children: [
-              Expanded(
-                flex: 1,
-                child: SideUI(controller: _musicController),
-              ),
+              Expanded(flex: 1, child: SideUI(controller: _musicController)),
               Expanded(
                 flex: 9,
                 child: MusicListBody(
@@ -76,9 +74,21 @@ class _MusicListScreenState extends State<MusicListScreen> {
               ),
             ],
           ),
-          MusicListBody(
-            controller: _mediaController,
-            isActive: currentPage == 1,
+
+          Row(
+            children: [
+              // Expanded(
+              //   flex: 1,
+              //   child: MediaProgress(controller: _mediaController),
+              // ),
+              Expanded(
+                flex: 10,
+                child: MusicListBody(
+                  controller: _mediaController,
+                  isActive: currentPage == 1,
+                ),
+              ),
+            ],
           ),
         ],
       ),
@@ -89,11 +99,11 @@ class _MusicListScreenState extends State<MusicListScreen> {
           // 鳴っていない（停止中）なら今見ている画面のコントローラを表示する
           final controllerToShow = (_playbackService.playingSession.isPlaying)
               ? (_playbackService.playingType == SessionType.music
-                  ? _musicController
-                  : _mediaController)
+                    ? _musicController
+                    : _mediaController)
               : (_playbackService.activeType == SessionType.music
-                  ? _musicController
-                  : _mediaController);
+                    ? _musicController
+                    : _mediaController);
 
           return MiniPlayer(controller: controllerToShow);
         },
