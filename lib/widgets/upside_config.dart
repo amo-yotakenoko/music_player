@@ -61,6 +61,7 @@ class _ConfigSetterState extends State<ConfigSetter> {
             IconButton(
               icon: const Icon(Icons.refresh),
               onPressed: () {
+                // 明示的にクリアしてからセットすることで、diffutilに頼らず作り直す
                 widget.controller.clearFiles();
                 widget.controller.setMusicFiles();
               },
@@ -78,6 +79,7 @@ class _ConfigSetterState extends State<ConfigSetter> {
   }
 
   void _openModal(BuildContext context, MusicPlayerController controller) {
+    final initialDate = controller.filterDate;
     showModalBottomSheet(
       context: context,
       shape: const RoundedRectangleBorder(
@@ -94,9 +96,25 @@ class _ConfigSetterState extends State<ConfigSetter> {
                   children: [
                     ListTile(
                       title: const Text('開始日フィルタ'),
-                      subtitle: Text(
-                        controller.filterDate?.toString().split(' ')[0] ??
-                            'なし (全件)',
+                      subtitle: Row(
+                        children: [
+                          Text(
+                            controller.filterDate != null
+                                ? controller.filterDate.toString().split(' ')[0]
+                                : '未設定',
+                          ),
+                          if (controller.filterDate != null) ...[
+                            const SizedBox(width: 8),
+                            ElevatedButton(
+                              onPressed: () {
+                                print("解除");
+                                controller.filterDate = null;
+                                setModalState(() {});
+                              },
+                              child: const Text('解除'),
+                            ),
+                          ],
+                        ],
                       ),
                       trailing: const Icon(Icons.calendar_today),
                       onTap: () async {
@@ -128,6 +146,10 @@ class _ConfigSetterState extends State<ConfigSetter> {
                     ElevatedButton(
                       onPressed: () {
                         print("押された");
+                        if (controller.filterDate != initialDate) {
+                          print("フィルタ変更あり: 初期化して再読み込み");
+                          controller.clearFiles();
+                        }
                         controller.setMusicFiles();
                         Navigator.pop(context);
                       },
