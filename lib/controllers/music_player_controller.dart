@@ -204,14 +204,24 @@ class MusicPlayerController extends ChangeNotifier {
 
     try {
       List<MusicFile> musicfiles = await AudioFileService.loadMusicFiles(
-        libraryTypeFilter:
-            sessionType == SessionType.media
-                ? LibraryType.media
-                : LibraryType.music,
+        libraryTypeFilter: sessionType == SessionType.media
+            ? LibraryType.media
+            : LibraryType.music,
       );
-      if (musicfiles.isEmpty) return;
+
+      if (musicfiles.isEmpty) {
+        isLoading = false;
+        notifyListeners();
+        return;
+      }
 
       allLoadedFiles = List<MusicFile>.from(musicfiles);
+
+      // 全体を日付順（新しい順）にソートしておく
+      musicfiles.sort(
+        (a, b) =>
+            (b.modified ?? DateTime(0)).compareTo(a.modified ?? DateTime(0)),
+      );
 
       if (filterDate != null) {
         final startOfDay = DateTime(
@@ -219,15 +229,18 @@ class MusicPlayerController extends ChangeNotifier {
           filterDate!.month,
           filterDate!.day,
         );
-        musicfiles =
-            musicfiles.where((f) {
-              return f.modified != null &&
-                  (f.modified!.isAfter(startOfDay) ||
-                      f.modified!.isAtSameMomentAs(startOfDay));
-            }).toList();
+        musicfiles = musicfiles.where((f) {
+          return f.modified != null &&
+              (f.modified!.isAfter(startOfDay) ||
+                  f.modified!.isAtSameMomentAs(startOfDay));
+        }).toList();
       }
 
-      if (musicfiles.isEmpty) return;
+      if (musicfiles.isEmpty) {
+        isLoading = false;
+        notifyListeners();
+        return;
+      }
 
       final allDirs = musicfiles.map((x) => p.basename(x.directory)).toSet();
       bool configChanged = false;
@@ -245,62 +258,133 @@ class MusicPlayerController extends ChangeNotifier {
         dirToFiles.putIfAbsent(d, () => []).add(f);
       }
 
+      // 各ディレクトリ内でのソート（shuffle設定がある場合のみ）
       for (final entry in dirToFiles.entries) {
         final dirName = entry.key;
         final list = entry.value;
         final config = shuffleConfig[dirName];
         if (config != null && config.shuffle) {
           list.shuffle();
-        } else {
-          list.sort(
-            (a, b) => (b.modified ?? DateTime(0)).compareTo(
-              a.modified ?? DateTime(0),
-            ),
-          );
         }
+        // shuffleでない場合は、元のソート（日付順）が維持されている
       }
 
-      final targetDirs = dirIter().take(100).toList();
-      final nowDirs = playQueue.map((x) => p.basename(x.directory)).toList();
-      final diffResult = diffutil.calculateListDiff(nowDirs, targetDirs);
-      final updates = diffResult.getUpdatesWithData();
+      // フィルタ時は件数を制限し、無駄な重複を避ける
+      int targetCount = filterDate != null ? musicfiles.length : 500;
 
-      final queue = List<MusicFile>.from(playQueue);
-      final Set<String> usedPathsInQueue = queue.map((m) => m.path).toSet();
-      final Map<String, int> dirPoolIndices = {};
+      // 有効な（曲が存在する）ディレクトリのみを抽出
+      final activeConfigKeys = shuffleConfig.entries
+          .where((e) => e.value.frequency > 0 && dirToFiles.containsKey(e.key))
+          .map((e) => e.key)
+          .toList();
 
-      for (final update in updates) {
-        if (update is diffutil.DataInsert<String>) {
-          final dirName = update.data;
+      if (activeConfigKeys.isEmpty && musicfiles.isNotEmpty) {
+        // 設定が全滅している場合は、マッチした全曲をそのまま並べる
+        playQueue = List<MusicFile>.from(musicfiles);
+        return;
+      }
+
+      final targetDirs = dirIterFiltered(
+        activeConfigKeys,
+      ).take(targetCount).toList();
+
+      List<MusicFile> newQueue;
+
+      if (playQueue.isEmpty) {
+        newQueue = [];
+        final Map<String, int> dirPoolIndices = {};
+        final Set<String> usedPaths = {};
+
+        for (final dirName in targetDirs) {
           final files = dirToFiles[dirName] ?? musicfiles;
-          MusicFile? selected;
           int startIdx = dirPoolIndices[dirName] ?? 0;
+          MusicFile? selected;
+
           for (int i = 0; i < files.length; i++) {
             int currentIdx = (startIdx + i) % files.length;
-            if (!usedPathsInQueue.contains(files[currentIdx].path)) {
+            if (!usedPaths.contains(files[currentIdx].path)) {
               selected = files[currentIdx];
               dirPoolIndices[dirName] = (currentIdx + 1) % files.length;
               break;
             }
           }
+          // 重複を許容してでも埋める場合（基本的にはフィルタ時はここに来ないように調整済み）
           if (selected == null) selected = files[startIdx % files.length];
-          final newFile = MusicFile.from(selected);
-          queue.insert(update.position, newFile);
-          usedPathsInQueue.add(newFile.path);
-        } else if (update is diffutil.DataRemove<String>) {
-          if (queue[update.position] == selectedMusic) continue;
-          final removed = queue.removeAt(update.position);
-          usedPathsInQueue.remove(removed.path);
-        } else if (update is diffutil.DataMove<String>) {
-          final item = queue.removeAt(update.from);
-          queue.insert(update.to, item);
+          newQueue.add(MusicFile.from(selected));
+          usedPaths.add(selected.path);
         }
+      } else {
+        final nowDirs = playQueue.map((x) => p.basename(x.directory)).toList();
+        final diffResult = diffutil.calculateListDiff(nowDirs, targetDirs);
+        final updates = diffResult.getUpdatesWithData();
+
+        final queue = List<MusicFile>.from(playQueue);
+        final Set<String> usedPathsInQueue = queue.map((m) => m.path).toSet();
+        final Map<String, int> dirPoolIndices = {};
+
+        for (final update in updates) {
+          if (update is diffutil.DataInsert<String>) {
+            final dirName = update.data;
+            final files = dirToFiles[dirName] ?? musicfiles;
+            MusicFile? selected;
+            int startIdx = dirPoolIndices[dirName] ?? 0;
+            for (int i = 0; i < files.length; i++) {
+              int currentIdx = (startIdx + i) % files.length;
+              if (!usedPathsInQueue.contains(files[currentIdx].path)) {
+                selected = files[currentIdx];
+                dirPoolIndices[dirName] = (currentIdx + 1) % files.length;
+                break;
+              }
+            }
+            if (selected == null) selected = files[startIdx % files.length];
+            final newFile = MusicFile.from(selected);
+            queue.insert(update.position, newFile);
+            usedPathsInQueue.add(newFile.path);
+          } else if (update is diffutil.DataRemove<String>) {
+            if (queue[update.position] == selectedMusic) continue;
+            final removed = queue.removeAt(update.position);
+            usedPathsInQueue.remove(removed.path);
+          } else if (update is diffutil.DataMove<String>) {
+            final item = queue.removeAt(update.from);
+            queue.insert(update.to, item);
+          }
+        }
+        newQueue = queue;
       }
 
-      playQueue = queue;
+      playQueue = newQueue;
     } finally {
       isLoading = false;
       notifyListeners();
+    }
+  }
+
+  Iterable<String> dirIterFiltered(List<String> activeKeys) sync* {
+    if (activeKeys.isEmpty) return;
+
+    final activeConfigs = activeKeys.map((k) => shuffleConfig[k]!).toList();
+    final totalFrequency = activeConfigs.fold<int>(
+      0,
+      (sum, e) => sum + e.frequency,
+    );
+    final Map<String, double> counters = {
+      for (var e in activeConfigs) e.name: 0.0,
+    };
+    while (true) {
+      for (var entry in activeConfigs) {
+        counters[entry.name] =
+            counters[entry.name]! + (entry.frequency / totalFrequency);
+      }
+      String bestName = activeConfigs.first.name;
+      double maxVal = -1.0;
+      counters.forEach((name, val) {
+        if (val > maxVal) {
+          maxVal = val;
+          bestName = name;
+        }
+      });
+      yield bestName;
+      counters[bestName] = counters[bestName]! - 1.0;
     }
   }
 

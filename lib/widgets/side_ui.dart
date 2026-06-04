@@ -14,29 +14,34 @@ class SideUI extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return RotatedBox(
-      quarterTurns: 1,
-      child: SingleChildScrollView(
-        scrollDirection: Axis.horizontal,
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            for (var entry in controller.shuffleConfig.entries.where(
-              (entry) => !entry.value.name.contains("配信"),
-            )) ...[
-              SideMixCustom(config: entry.value, onChanged: mix_update),
-              const SizedBox(
-                height: 24, // 区切り線の長さ
-                child: VerticalDivider(
-                  color: Colors.grey, // 線の色
-                  thickness: 1, // 線の太さ
-                  width: 20, // 左右の余白（スペース）の合計
-                ),
-              ),
-            ],
-          ],
-        ),
-      ),
+    return ListenableBuilder(
+      listenable: controller,
+      builder: (context, _) {
+        return RotatedBox(
+          quarterTurns: 1,
+          child: SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                for (var entry in controller.shuffleConfig.entries.where(
+                  (entry) => !entry.value.name.contains("配信"),
+                )) ...[
+                  SideMixCustom(config: entry.value, onChanged: mix_update),
+                  const SizedBox(
+                    height: 24, // 区切り線の長さ
+                    child: VerticalDivider(
+                      color: Colors.grey, // 線の色
+                      thickness: 1, // 線の太さ
+                      width: 20, // 左右の余白（スペース）の合計
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ),
+        );
+      },
     );
   }
 }

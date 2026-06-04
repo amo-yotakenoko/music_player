@@ -140,8 +140,8 @@ class _ConfigSetterState extends State<ConfigSetter> {
                       },
                     ),
                     const Divider(),
-                    for (var item in controller.shuffleConfig.entries)
-                      item.value.buildSpinBoxRow(() => setModalState(() {})),
+                    // for (var item in controller.shuffleConfig.entries)
+                    //   item.value.buildSpinBoxRow(() => setModalState(() {})),
                     const SizedBox(height: 20),
                     ElevatedButton(
                       onPressed: () {
