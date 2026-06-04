@@ -115,7 +115,10 @@ class PlaybackService extends ChangeNotifier {
 
       await music.loadVolumeFromCache();
       await _audioPlayer.setVolume(music.integratedLoudness != null ? music.adjustedVolume : 0.8);
-      await _audioPlayer.setSpeed(session.playbackSpeed);
+
+      // Musicセッションの場合は倍速再生を1.0に固定、Mediaセッションの場合は設定値を適用
+      final effectiveSpeed = (type == SessionType.music) ? 1.0 : session.playbackSpeed;
+      await _audioPlayer.setSpeed(effectiveSpeed);
 
       final source = AudioSource.uri(
         Uri.file(music.path),
@@ -148,6 +151,9 @@ class PlaybackService extends ChangeNotifier {
 
   Future<void> setSpeed(double speed) async {
     playingSession.playbackSpeed = speed;
-    await _audioPlayer.setSpeed(speed);
+    // 再生中のセッションがMusicの場合は常に1.0、Mediaの場合は指定速度を適用
+    final effectiveSpeed = (_playingType == SessionType.music) ? 1.0 : speed;
+    await _audioPlayer.setSpeed(effectiveSpeed);
+    notifyListeners();
   }
 }

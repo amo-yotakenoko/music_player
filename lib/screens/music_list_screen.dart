@@ -48,7 +48,9 @@ class _MusicListScreenState extends State<MusicListScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: ConfigSetter(controller: _musicController),
+      appBar: ConfigSetter(
+        controller: currentPage == 0 ? _musicController : _mediaController,
+      ),
       body: PageView(
         controller: _pageController,
         onPageChanged: (index) {

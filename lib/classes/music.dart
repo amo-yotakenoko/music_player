@@ -18,6 +18,9 @@ class MusicFile {
   double? truePeak;
   DateTime? modified;
 
+  /// 「配信」という単語がディレクトリ名に含まれている場合、メディアファイル（倍速再生対象）とみなす
+  bool get isMedia => directory.toLowerCase().contains('配信');
+
   double get adjustedVolume {
     if (integratedLoudness == null) return 1.0;
     // ターゲットを -14.0 LUFS とする
