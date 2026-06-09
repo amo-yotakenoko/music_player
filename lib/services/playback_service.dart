@@ -28,7 +28,7 @@ class PlaybackService extends ChangeNotifier {
   }
 
   final AudioPlayer _audioPlayer = AudioPlayer();
-  
+
   // セッションごとの状態管理
   final Map<SessionType, PlaybackSession> _sessions = {
     SessionType.music: PlaybackSession(),
@@ -45,10 +45,10 @@ class PlaybackService extends ChangeNotifier {
   // 外部公開用のゲッター
   SessionType get activeType => _activeType;
   SessionType get playingType => _playingType;
-  
+
   PlaybackSession get activeSession => _sessions[_activeType]!;
   PlaybackSession get playingSession => _sessions[_playingType]!;
-  
+
   PlaybackSession getSession(SessionType type) => _sessions[type]!;
   AudioPlayer get player => _audioPlayer;
 
@@ -64,30 +64,40 @@ class PlaybackService extends ChangeNotifier {
     _audioPlayer.playerStateStream.listen((state) {
       if (_isTransitioning) return;
       playingSession.isPlaying = state.playing;
-      
+
       // 再生が止まった（ポーズされた）タイミングで進捗を保存
       if (!state.playing && playingSession.selectedMusic != null) {
-        playingSession.selectedMusic!.saveProgress(
-          _audioPlayer.position,
-          totalDuration: _audioPlayer.duration,
-        );
+        saveProgress();
       }
-      
-      notifyListeners(); 
+
+      notifyListeners();
     });
     _audioPlayer.speedStream.listen((speed) {
       playingSession.playbackSpeed = speed;
     });
   }
 
+  Future<void> saveProgress() {
+    if (playingSession.selectedMusic != null) {
+      if (playingSession.selectedMusic?.directory.contains("配信") == true) {
+        return playingSession.selectedMusic!.saveProgress(
+          _audioPlayer.position,
+          totalDuration: _audioPlayer.duration,
+        );
+      }
+    }
+
+    return Future.value();
+  }
+
   /// セッションを切り替える
   Future<void> switchSession(SessionType newType) async {
     if (_activeType == newType) return;
-    
+
     _activeType = newType;
 
     final targetSession = _sessions[newType]!;
-    
+
     if (targetSession.selectedMusic != null && targetSession.isPlaying) {
       if (_playingType == newType && _audioPlayer.playing) {
         notifyListeners();
@@ -103,16 +113,13 @@ class PlaybackService extends ChangeNotifier {
   Future<void> play(SessionType type, MusicFile music) async {
     // 現在の曲の進捗を保存してから切り替える
     if (playingSession.selectedMusic != null) {
-      await playingSession.selectedMusic!.saveProgress(
-        _audioPlayer.position,
-        totalDuration: _audioPlayer.duration,
-      );
+      await saveProgress();
     }
 
     final session = _sessions[type]!;
     session.selectedMusic = music;
     session.isPlaying = true;
-    
+
     // 保存されていた進捗を読み込む
     final savedPosition = await music.loadProgress();
     session.position.value = savedPosition;
@@ -128,16 +135,20 @@ class PlaybackService extends ChangeNotifier {
     _isTransitioning = true;
     try {
       await _audioPlayer.stop();
-      
+
       _playingType = type;
       // 読み込み開始時に時間をリセット（位置指定がある場合は後で上書きされる）
       session.duration.value = Duration.zero;
 
       await music.loadVolumeFromCache();
-      await _audioPlayer.setVolume(music.integratedLoudness != null ? music.adjustedVolume : 0.8);
+      await _audioPlayer.setVolume(
+        music.integratedLoudness != null ? music.adjustedVolume : 0.8,
+      );
 
       // Musicセッションの場合は倍速再生を1.0に固定、Mediaセッションの場合は設定値を適用
-      final effectiveSpeed = (type == SessionType.music) ? 1.0 : session.playbackSpeed;
+      final effectiveSpeed = (type == SessionType.music)
+          ? 1.0
+          : session.playbackSpeed;
       await _audioPlayer.setSpeed(effectiveSpeed);
 
       final source = AudioSource.uri(
@@ -145,8 +156,11 @@ class PlaybackService extends ChangeNotifier {
         tag: music.toMediaItem(),
       );
 
-      await _audioPlayer.setAudioSource(source, initialPosition: session.position.value);
-      
+      await _audioPlayer.setAudioSource(
+        source,
+        initialPosition: session.position.value,
+      );
+
       if (session.isPlaying) {
         _audioPlayer.play();
       }
@@ -160,10 +174,7 @@ class PlaybackService extends ChangeNotifier {
   Future<void> togglePlayPause() async {
     if (_audioPlayer.playing) {
       if (playingSession.selectedMusic != null) {
-        await playingSession.selectedMusic!.saveProgress(
-          _audioPlayer.position,
-          totalDuration: _audioPlayer.duration,
-        );
+        await saveProgress();
       }
       await _audioPlayer.pause();
     } else {
@@ -175,10 +186,7 @@ class PlaybackService extends ChangeNotifier {
     await _audioPlayer.seek(pos);
     // シーク後も保存しておく
     if (playingSession.selectedMusic != null) {
-      playingSession.selectedMusic!.saveProgress(
-        pos,
-        totalDuration: _audioPlayer.duration,
-      );
+      saveProgress();
     }
   }
 
