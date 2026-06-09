@@ -156,9 +156,13 @@ class PlaybackService extends ChangeNotifier {
         tag: music.toMediaItem(),
       );
 
+      Duration initialPosition = session.position.value;
+      if (session.duration.value - initialPosition < Duration(seconds: 10)) {
+        initialPosition -= Duration(seconds: 10);
+      }
       await _audioPlayer.setAudioSource(
         source,
-        initialPosition: session.position.value,
+        initialPosition: initialPosition,
       );
 
       if (session.isPlaying) {
