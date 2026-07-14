@@ -8,7 +8,8 @@ import 'package:ffmpeg_kit_flutter_new/return_code.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:just_audio_background/just_audio_background.dart';
 
-class MusicFile {
+class MusicItem {
+  final String id;
   FileSystemEntity fileEntry;
   final String path;
   String title;
@@ -17,6 +18,7 @@ class MusicFile {
   double? integratedLoudness;
   double? truePeak;
   DateTime? modified;
+  final Key key;
 
   /// 「配信」という単語がディレクトリ名に含まれている場合、メディアファイル（倍速再生対象）とみなす
   bool get isMedia => directory.toLowerCase().contains('配信');
@@ -35,18 +37,18 @@ class MusicFile {
     return (0.8 * linearGain).clamp(0.0, 1.0);
   }
 
-  final Key key;
-
   // 初期化リスト（コロンの後ろで代入する）
-  MusicFile(FileSystemEntity file)
-    : fileEntry = file,
+  MusicItem(FileSystemEntity file)
+    : id = UniqueKey().toString(),
+      fileEntry = file,
       path = file.path,
       title = p.basename(file.path),
       directory = p.dirname(file.path),
       key = UniqueKey();
 
-  MusicFile.from(MusicFile other)
-    : fileEntry = other.fileEntry,
+  MusicItem.from(MusicItem other)
+    : id = UniqueKey().toString(),
+      fileEntry = other.fileEntry,
       path = other.path,
       title = other.title,
       directory = other.directory,
@@ -178,6 +180,14 @@ class MusicFile {
   @override
   String toString() {
     // メンバ変数を分かりやすく整形
-    return 'MusicFile(title: $title, directory: $directory, integratedLoudness: $integratedLoudness)';
+    return 'MusicItem(title: $title, directory: $directory, integratedLoudness: $integratedLoudness)';
   }
+
+  @override
+  bool operator ==(Object other) =>
+    identical(this, other) ||
+    other is MusicItem && id == other.id;
+
+  @override
+  int get hashCode => id.hashCode;
 }

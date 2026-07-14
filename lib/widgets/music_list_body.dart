@@ -62,14 +62,13 @@ class _MusicListBodyState extends State<MusicListBody> {
           itemCount: widget.controller.musicFiles.length,
           onReorder: widget.controller.reorder,
           itemBuilder: (context, index) {
-            final music = widget.controller.musicFiles[index];
+            final queueItem = widget.controller.musicFiles[index];
             return MusicTile(
-              key: music.key,
-              music: music,
+              key: queueItem.key,
+              music: queueItem,
               onTap: () async {
                 if (widget.controller.sessionType == SessionType.media) {
-                  // Mediaの場合は再生を開始して詳細画面へ
-                  await widget.controller.play(music);
+                  await widget.controller.play(queueItem);
                   if (context.mounted) {
                     Navigator.push(
                       context,
@@ -81,18 +80,16 @@ class _MusicListBodyState extends State<MusicListBody> {
                     );
                   }
                 } else {
-                  // Musicの場合は従来通り（すでに再生中なら何もしない）
-                  if (widget.controller.selectedMusic?.path == music.path &&
+                  if (widget.controller.selectedMusic?.id == queueItem.id &&
                       widget.controller.isPlaying) {
                     return;
                   }
-                  widget.controller.play(music);
+                  widget.controller.play(queueItem);
                 }
               },
               onMenuPressed: () {
-                _openItemModal(context, index, music, widget.controller);
+                _openItemModal(context, index, queueItem, widget.controller);
               },
-              // ドラッグがあるので、ボタンでの移動はオプションとして残す
               onMoveUp: index > 0
                   ? () => widget.controller.moveMusicUp(index)
                   : null,
@@ -100,7 +97,7 @@ class _MusicListBodyState extends State<MusicListBody> {
                   ? () => widget.controller.moveMusicDown(index)
                   : null,
               isPlaying:
-                  widget.controller.selectedMusic?.path == music.path &&
+                  widget.controller.selectedMusic?.id == queueItem.id &&
                   widget.controller.isPlaying,
             );
           },
@@ -128,7 +125,7 @@ class _MusicListBodyState extends State<MusicListBody> {
   void _openItemModal(
     BuildContext context,
     int index,
-    MusicFile music,
+    MusicItem queueItem,
     MusicPlayerController controller,
   ) {
     showModalBottomSheet(
@@ -145,7 +142,7 @@ class _MusicListBodyState extends State<MusicListBody> {
               mainAxisSize: MainAxisSize.min,
               children: [
                 Text(
-                  "${music.title} を操作",
+                  "${queueItem.title} を操作",
                   style: const TextStyle(
                     fontWeight: FontWeight.bold,
                     fontSize: 18,
@@ -153,7 +150,6 @@ class _MusicListBodyState extends State<MusicListBody> {
                 ),
                 const SizedBox(height: 20),
 
-                // 次に再生
                 ListTile(
                   leading: const Icon(Icons.playlist_add),
                   title: const Text("次に再生"),
@@ -163,7 +159,6 @@ class _MusicListBodyState extends State<MusicListBody> {
                   },
                 ),
 
-                // 上に移動
                 if (index > 0)
                   ListTile(
                     leading: const Icon(Icons.arrow_upward),
@@ -174,7 +169,6 @@ class _MusicListBodyState extends State<MusicListBody> {
                     },
                   ),
 
-                // 下に移動
                 if (index < controller.musicFiles.length - 1)
                   ListTile(
                     leading: const Icon(Icons.arrow_downward),
@@ -187,7 +181,6 @@ class _MusicListBodyState extends State<MusicListBody> {
 
                 const Divider(),
 
-                // 削除ボタン
                 ListTile(
                   leading: const Icon(Icons.delete, color: Colors.red),
                   title: const Text(
@@ -198,10 +191,10 @@ class _MusicListBodyState extends State<MusicListBody> {
                     ),
                   ),
                   onTap: () {
-                    controller.removeMusic(music);
+                    controller.removeMusic(queueItem);
                     Navigator.pop(modalContext);
                     ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(content: Text("${music.title} を削除しました")),
+                      SnackBar(content: Text("${queueItem.title} を削除しました")),
                     );
                   },
                 ),
@@ -217,7 +210,7 @@ class _MusicListBodyState extends State<MusicListBody> {
                   ),
                   onTap: () {
                     Navigator.pop(modalContext);
-                    controller.deleteMusicFile(context, music);
+                    controller.deleteMusicFile(context, queueItem);
                   },
                 ),
               ],

@@ -66,7 +66,6 @@ class MiniPlayer extends StatelessWidget {
                     );
                   },
                 ),
-                // 再生情報の表示
                 Padding(
                   padding:
                       const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
@@ -83,7 +82,6 @@ class MiniPlayer extends StatelessWidget {
                               style:
                                   const TextStyle(fontWeight: FontWeight.bold),
                             ),
-                            // 時間表示も監視
                             ValueListenableBuilder<Duration>(
                               valueListenable: controller.durationNotifier,
                               builder: (context, duration, _) {
@@ -140,7 +138,6 @@ class MiniPlayer extends StatelessWidget {
     );
   }
 
-  /// Durationを「分:秒」の形式に変換
   String _formatDuration(Duration duration) {
     String twoDigits(int n) => n.toString().padLeft(2, "0");
     String twoDigitMinutes = twoDigits(duration.inMinutes.remainder(60));

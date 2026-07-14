@@ -14,7 +14,7 @@ void music_list_move(BuildContext context, int scroll) {
 /// 【表示部品層（リストアイテム）】
 /// 1つの音楽ファイルを表示するためのタイルウィジェット。
 class MusicTile extends StatelessWidget {
-  final MusicFile music;
+  final MusicItem music;
   final VoidCallback? onTap;
   final VoidCallback onMenuPressed;
   final VoidCallback? onMoveUp;
@@ -55,7 +55,6 @@ class MusicTile extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.center,
           mainAxisSize: MainAxisSize.min,
           children: [
-            // アイコンとディレクトリ名のオーバーレイ
             Stack(
               clipBehavior: Clip.none,
               children: [
@@ -100,7 +99,6 @@ class MusicTile extends StatelessWidget {
               mainAxisAlignment: MainAxisAlignment.center,
               mainAxisSize: MainAxisSize.min,
               children: [
-                // 上ボタン
                 GestureDetector(
                   onTap: () {
                     onMoveUp?.call();
@@ -109,7 +107,6 @@ class MusicTile extends StatelessWidget {
                   child: const Icon(Icons.arrow_drop_up, size: 20),
                 ),
 
-                // 下ボタン
                 GestureDetector(
                   onTap: () {
                     onMoveDown?.call();

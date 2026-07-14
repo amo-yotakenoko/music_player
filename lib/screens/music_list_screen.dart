@@ -6,7 +6,6 @@ import '../widgets/upside_config.dart';
 import '../widgets/side_ui.dart';
 import '../controllers/media_player_controller.dart';
 import '../services/playback_service.dart';
-import '../widgets/media_progress.dart';
 
 /// 【表示層（メイン画面）】
 /// 画面の全体構造（Scaffold）のみを定義し、具体的な中身やロジックは他に任せる。

@@ -5,7 +5,7 @@ import '../classes/music.dart';
 
 /// プレイヤーの状態を保持するためのクラス
 class PlaybackSession {
-  MusicFile? selectedMusic;
+  MusicItem? selectedMusic;
   final ValueNotifier<Duration> position = ValueNotifier(Duration.zero);
   final ValueNotifier<Duration> duration = ValueNotifier(Duration.zero);
   bool isPlaying = false;
@@ -110,7 +110,7 @@ class PlaybackService extends ChangeNotifier {
   }
 
   /// 曲を再生する
-  Future<void> play(SessionType type, MusicFile music) async {
+  Future<void> play(SessionType type, MusicItem music) async {
     // 現在の曲の進捗を保存してから切り替える
     if (playingSession.selectedMusic != null) {
       await saveProgress();

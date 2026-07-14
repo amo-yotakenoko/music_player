@@ -1,40 +1,183 @@
-# 音楽プレイヤー設計メモ（2026/06/04 リファクタリング版）
+# Music Player 設計書
 
-## 1. 全体構造
-アプリ全体の「音を鳴らす実体」と「再生状態」を一元管理するため、司令塔となる `PlaybackService` を導入しました。
+## 1. レイヤー構造
 
-### 構成要素
-*   **PlaybackService (サービス層)**: アプリに1つだけのシングルトン。`AudioPlayer` を唯一保持し、再生命令を全て引き受ける。
-*   **PlaybackSession (データモデル)**: 「Music用」と「Media用」それぞれの再生状態（曲、秒数、再生中フラグ）を個別に保持する箱。
-*   **Music/MediaPlayerController (ロジック層)**: 各画面のリスト管理（シャッフル、キュー）を担当。再生命令は `PlaybackService` へ委譲する。
-*   **MusicListScreen (表示層)**: `PageView` で画面を切り替える際、`PlaybackService` に「今はこのセッションを見ています」と通知する。
+```
+main.dart
+  └─ MusicListScreen（Scaffold, PageView）
+       ├─ ConfigSetter（AppBar: 速度Slider / 検索 / リロード / 日付フィルタ）
+       ├─ SideUI（左パネル: ディレクトリ別 frequency 設定）
+       ├─ MusicListBody（メイン: ReorderableListView）
+       │    └─ MusicTile（1行）
+       └─ MiniPlayer（下部: シークバー + 再生制御）
+```
 
----
-
-## 2. 再生状態の同期ロジック
-以前発生していた「秒数の巻き戻り」や「競合」を防ぐため、以下の仕組みを採用しています。
-
-### 実際の再生タイプ (`playingType`) と 表示タイプ (`activeType`) の分離
-*   **activeType**: ユーザーが今画面で見ている方（スワイプで切り替わる）。
-*   **playingType**: 実際に音が鳴っている方。
-*   **効果**: 画面を切り替えても、秒数の更新は「実際に音が鳴っているセッション」に対してのみ行われるため、別の画面のデータを汚染しません。
-
-### 遷移ガード (`_isTransitioning`)
-*   曲を止めてから次の曲を読み込むまでの間、プレイヤーから飛んでくる古い位置情報（例：前の曲の最後の秒数）を完全に無視します。
-*   これにより、切り替え先の曲が 0秒 から始まるべきところで前の曲の 30分 地点に飛ばされるような事故を防ぎます。
-
-### 情報の単一化 (Single Source of Truth)
-*   各コントローラーは自分専用の秒数変数を持たず、`PlaybackService` が管理している `ValueNotifier` を直接UIに提供します。
-*   これにより、データのコピーによる遅延や不一致が根本的に解消され、再生バーが常に正確な位置を示します。
+| レイヤー | ディレクトリ | 責務 |
+|---------|-------------|------|
+| **モデル** | `classes/` | `MusicItem`（id + key で一意識別可能な曲データ） |
+| **サービス** | `services/` | `AudioFileService`（ファイルI/O）, `PlaybackService`（音声再生の司令塔） |
+| **コントローラ** | `controllers/` | `MusicPlayerController`（キュー・状態管理）, `MediaPlayerController`（その継承） |
+| **画面** | `screens/` | Scaffold 定義、ページ遷移 |
+| **部品** | `widgets/` | UI パーツ（表示のみ） |
 
 ---
 
-## 3. 特徴的な挙動
-*   **シームレスな往復**: Music再生中にMedia画面へ行き、またMusicに戻った際、もし同じ曲が鳴り続けているなら「再生のし直し」をスキップします。これにより音が途切れません。
-*   **自動再生の責任分担**: 曲が終了した際の「次の曲へ移動」は、現在画面に映っているかどうかに関係なく、その曲を管理しているコントローラー（＝音が鳴っている方）が実行します。
-*   **MiniPlayerの賢いルーティング**: 音が鳴っている間は常に「今鳴っている曲」の操作パネルを表示し、止まっている時は「今見ている画面」の曲を表示します。
+## 2. クラス図
+
+```
+┌─────────────────────────────────────────────────┐
+│ MusicItem                                       │
+│  id (一意), key (Widget用)                      │
+│  path, title, directory, artist                 │
+│  integratedLoudness, truePeak, modified         │
+│  isMedia, adjustedVolume                        │
+│  loadTags(), loadVolumeFromCache()              │
+│  saveProgress(), loadProgress()                 │
+│  loadTotalDuration(), detectVolume()            │
+│  toMediaItem()                                  │
+│  == / hashCode は id ベース                      │
+└──────────────┬──────────────────────────────────┘
+               │ List<MusicItem>（id で一意識別、コピー時も新しい id）
+               ▼
+┌─────────────────────────────────────────────────┐
+│ MusicPlayerController (ChangeNotifier)           │
+│  playQueue: List<MusicItem>                      │
+│  allLoadedFiles: List<MusicItem>                 │
+│  shuffleConfig: Map<String, ShuffleConfig>       │
+│  filterDate: DateTime?                           │
+│  play(), playNext(), playNow(), addNext()        │
+│  reorder(), moveMusicUp/Down/Next()              │
+│  removeMusic(), deleteMusicFile()                │
+│  loadFiles(), setMusicFiles(), clearFiles()      │
+│  togglePlayPause(), seek(), timeSkip()           │
+│  └─ delegate: PlaybackSession (経由 PlaybackService)
+└──────────────┬──────────────────────────────────┘
+               │ extends
+               ▼
+┌─────────────────────────────────────────────────┐
+│ MediaPlayerController                             │
+│  (MusicPlayerController + SessionType.media)      │
+└─────────────────────────────────────────────────┘
+
+┌─────────────────────────────────────────────────┐
+│ PlaybackSession                                  │
+│  selectedMusic: MusicQueueItem?                  │
+│  position / duration: ValueNotifier<Duration>    │
+│  isPlaying, playbackSpeed                        │
+└──────────────┬──────────────────────────────────┘
+               │ Map<SessionType, PlaybackSession>
+               ▼
+┌─────────────────────────────────────────────────┐
+│ PlaybackService (ChangeNotifier, Singleton)      │
+│  _audioPlayer: AudioPlayer (just_audio)          │
+│  play(), switchSession(), _loadAndPlay()         │
+│  togglePlayPause(), seek(), setSpeed()           │
+│  activeType, playingType                         │
+└─────────────────────────────────────────────────┘
+
+┌─────────────────────────────────────────────────┐
+│ AudioFileService (静的メソッドのみ)               │
+│  loadMusicFiles() → List<MusicItem>              │
+│  requestPermissions()                            │
+└─────────────────────────────────────────────────┘
+```
 
 ---
 
-## 4. 今後の拡張に向けて
-この設計により、将来的に「通知バーからの操作」や「外部プレイリストからの再生」を追加する場合も、`PlaybackService` のメソッドを呼ぶだけで全ての状態（UI、セッション、実機プレイヤー）が自動的に同期されるようになっています。
+## 3. データフロー
+
+### ファイル読み込み〜再生
+```
+AudioFileService.loadMusicFiles()
+  → List<MusicItem>
+  → MusicPlayerController.loadFiles()
+     → playQueue = items.map(MusicQueueItem.new)
+  → UI が ListenableBuilder で再描画
+  → ユーザータップ → controller.play(queueItem)
+     → PlaybackService.play()
+        → _loadAndPlay() で just_audio にセット
+```
+
+### 次曲自動再生
+```
+just_audio ProcessingState.completed
+  → MusicPlayerController.playNext()
+     → playQueue.indexWhere(m => m.id == selectedMusic.id)
+     → (index + 1) % length → play()
+```
+
+**バグ修正ポイント**: 旧コードは `m.path == selectedMusic.path` で比較していたため、
+同一パスの曲がキューに複数あると常に最初の位置を返し不安定だった。
+現在はインスタンスごとの一意な `m.id == selectedMusic.id` で比較する。
+
+### playNow / addNext
+```
+playNow(MusicItem)
+  → 同名パスをキューから削除
+  → selectedMusic.id の直後に MusicQueueItem を挿入
+  → 再生
+addNext(MusicItem) も同様（即再生しない）
+```
+
+### キュー再構築（setMusicFiles）
+```
+setMusicFiles()
+  → ファイル再スキャン
+  → 日付ソート / フィルタ適用
+  → ディレクトリ別にグループ化
+  → dirIterFiltered() で weighted round-robin
+  → diffutil で既存キューとの差分を計算
+     → Insert / Remove / Move を適用
+  → playQueue を差し替え
+```
+
+---
+
+## 4. 各コンポーネントの役割
+
+| ファイル | 役割 |
+|---------|------|
+| `main.dart` | アプリ起動、JustAudioBackground 初期化、MaterialApp |
+| `music.dart` | `MusicItem`（曲データ）, `MusicQueueItem`（キューエントリ: id で一意識別） |
+| `music_player_controller.dart` | キュー操作・状態管理・シャッフル設定・ルーティング。ChangeNotifier |
+| `media_player_controller.dart` | 継承のみ。sessionType = media |
+| `playback_service.dart` | 音声再生の実処理。Singleton。music/media 2セッション管理 |
+| `audio_file_service.dart` | 静的メソッド。ファイル一覧スキャン + タグ読み込み |
+| `music_list_screen.dart` | PageView で music/media タブ切り替え。MiniPlayer 表示制御 |
+| `media_player_screen.dart` | メディア専用全画面プレイヤー（90度回転、倍速操作） |
+| `music_list_body.dart` | ReorderableListView + コンテキストメニュー（移動・削除） |
+| `music_tile.dart` | 1行分の表示（タイトル・アーティスト・進捗・上下ボタン） |
+| `mini_player.dart` | 下部固定のシークバー + 再生/一時停止/スキップ |
+| `search_music_screen.dart` | 全曲リアルタイム検索 + playNow/addNext |
+| `upside_config.dart` | AppBar: 速度Slider / 検索 / リロード / 日付フィルタ設定 |
+| `side_ui.dart` | 左パネル: ディレクトリ別 frequency 表示 |
+| `side_ui_mix_custum.dart` | frequency 増減ステッパー |
+| `media_progress.dart` | 未使用（旧・縦スライダー） |
+
+---
+
+## 5. キュー操作一覧
+
+| 操作 | メソッド | 比較キー |
+|------|---------|---------|
+| 次曲へ | `playNext()` | `selectedMusic.id` |
+| 即再生 + 移動 | `playNow(MusicItem)` | 削除: `path`, 挿入位置: `selectedMusic.id` |
+| 次に追加 | `addNext(MusicItem)` | 削除: `path`, 挿入位置: `selectedMusic.id` |
+| 削除 | `removeMusic(MusicItem)` | `music.id` |
+| 次に移動 | `moveMusicNext(index)` | `selectedMusic.id` |
+| 上下移動 | `moveMusicUp/Down(index)` | インデックス直接 |
+| ドラッグ | `reorder(old, new)` | インデックス直接 |
+
+---
+
+## 6. ShuffleConfig / ディレクトリ重み付け
+
+```
+shuffleConfig: Map<String, ShuffleConfig>
+  └─ ShuffleConfig { name, frequency (0-5), shuffle (bool) }
+
+dirIterFiltered(): weighted round-robin
+  → frequency 比でディレクトリを選択、1曲ずつピック
+  → 同一パス重複回避（usedPaths Set）
+  → queue 再構築時は diffutil で差分適用
+```

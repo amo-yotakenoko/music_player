@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import '../controllers/music_player_controller.dart';
-import '../classes/music.dart';
 
 class MediaPlayerScreen extends StatelessWidget {
   final MusicPlayerController controller;
@@ -29,7 +28,6 @@ class MediaPlayerScreen extends StatelessWidget {
                           mainAxisAlignment: MainAxisAlignment.center,
                           children: [
                             const SizedBox(height: 20),
-                            // タイトル表示
                             Text(
                               music.title,
                               style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold),
@@ -94,6 +92,7 @@ class MediaPlayerScreen extends StatelessWidget {
                             const SizedBox(height: 30),
 
                             // 倍速バー
+
                             Row(
                               children: [
                                 const Icon(Icons.speed, color: Colors.white, size: 20),
@@ -120,7 +119,7 @@ class MediaPlayerScreen extends StatelessWidget {
                           ],
                         ),
                       ),
-                      
+
                       // 左上の戻るボタン
                       Positioned(
                         top: 16,

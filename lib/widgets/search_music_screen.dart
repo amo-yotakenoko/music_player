@@ -16,13 +16,12 @@ class SearchMusicScreen extends StatefulWidget {
 class _SearchMusicScreenState extends State<SearchMusicScreen> {
   final TextEditingController _searchController = TextEditingController();
   String _query = '';
-  List<MusicFile> _results = [];
+  List<MusicItem> _results = [];
   bool _isLoading = false;
 
   @override
   void initState() {
     super.initState();
-    // 初期表示時も読み込む
     _onSearchChanged('');
   }
 
@@ -39,9 +38,8 @@ class _SearchMusicScreenState extends State<SearchMusicScreen> {
     });
 
     try {
-      // 毎回最新のファイルをスキャン
       final allFiles = await AudioFileService.loadMusicFiles();
-      
+
       final rawQuery = value.trim();
       if (rawQuery.isEmpty) {
         if (mounted) {
@@ -152,7 +150,7 @@ class _SearchMusicScreenState extends State<SearchMusicScreen> {
 }
 
 class _SearchResultTile extends StatelessWidget {
-  final MusicFile music;
+  final MusicItem music;
   final MusicPlayerController controller;
 
   const _SearchResultTile({

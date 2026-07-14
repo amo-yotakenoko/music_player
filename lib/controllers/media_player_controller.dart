@@ -1,4 +1,3 @@
-import 'dart:async';
 import 'package:music_player/controllers/music_player_controller.dart';
 import '../services/playback_service.dart';
 

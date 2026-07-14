@@ -28,7 +28,7 @@ class AudioFileService {
 
   /// 音楽ファイルのリストを取得する
   /// 返り値: 取得したファイルエンティティのリスト
-  static Future<List<MusicFile>> loadMusicFiles({
+  static Future<List<MusicItem>> loadMusicFiles({
     LibraryType libraryTypeFilter = LibraryType.music,
   }) async {
     try {
@@ -42,7 +42,7 @@ class AudioFileService {
       final musicDir = await _getMusicDirectory();
 
       if (musicDir != null && await musicDir.exists()) {
-        List<MusicFile> musicFiles = await _listMusicFiles(
+        List<MusicItem> musicFiles = await _listMusicFiles(
           musicDir,
           libraryTypeFilter,
         );
@@ -78,11 +78,11 @@ class AudioFileService {
     return null;
   }
 
-  static Future<List<MusicFile>> _listMusicFiles(
+  static Future<List<MusicItem>> _listMusicFiles(
     Directory dir,
     LibraryType libraryTypeFilter,
   ) async {
-    final List<MusicFile> files = [];
+    final List<MusicItem> files = [];
 
     await for (FileSystemEntity file in dir.list(
       recursive: true,
@@ -101,7 +101,7 @@ class AudioFileService {
 
         final path = file.path.toLowerCase();
         if (['.mp3', '.m4a', '.wav'].any((ext) => path.endsWith(ext))) {
-          MusicFile musicFile = MusicFile(file);
+          MusicItem musicFile = MusicItem(file);
           musicFile.modified = await file.lastModified();
           files.add(musicFile);
         }

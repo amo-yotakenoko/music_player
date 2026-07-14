@@ -39,7 +39,6 @@ class ShuffleConfig {
           ),
         ),
         const SizedBox(width: 20),
-        // shuffle用
         Switch(
           value: shuffle,
           onChanged: (value) {
@@ -61,19 +60,19 @@ class MusicPlayerController extends ChangeNotifier {
 
   // --- 状態（State） ---
   @protected
-  List<MusicFile> playQueue = [];
+  List<MusicItem> playQueue = [];
   @protected
-  List<MusicFile> allLoadedFiles = [];
+  List<MusicItem> allLoadedFiles = [];
   @protected
   bool isLoading = false;
 
   // --- 外部公開用のゲッター ---
-  List<MusicFile> get musicFiles => playQueue;
-  List<MusicFile> get allMusicFiles => allLoadedFiles;
+  List<MusicItem> get musicFiles => playQueue;
+  List<MusicItem> get allMusicFiles => allLoadedFiles;
 
   // PlaybackServiceのセッションに委譲
   PlaybackSession get _session => _playbackService.getSession(sessionType);
-  MusicFile? get selectedMusic => _session.selectedMusic;
+  MusicItem? get selectedMusic => _session.selectedMusic;
   // 実際にプレイヤーがこのセッションタイプを鳴らしているかどうかで判定
   bool get isPlaying =>
       _session.isPlaying && _playbackService.playingType == sessionType;
@@ -121,7 +120,7 @@ class MusicPlayerController extends ChangeNotifier {
           ? LibraryType.media
           : LibraryType.music,
     );
-    allLoadedFiles = List<MusicFile>.from(files);
+    allLoadedFiles = List<MusicItem>.from(files);
     playQueue = files;
     isLoading = false;
     notifyListeners();
@@ -132,53 +131,47 @@ class MusicPlayerController extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future<void> play(MusicFile music) async {
+  Future<void> play(MusicItem music) async {
     await _playbackService.play(sessionType, music);
     playcallBack?.call();
   }
 
   /// 指定した曲をキューの現在の位置に挿入（または移動）して即座に再生する
-  Future<void> playNow(MusicFile music) async {
-    final index = playQueue.indexWhere((m) => m.path == music.path);
-    if (index != -1) {
-      playQueue.removeAt(index);
-    }
+  Future<void> playNow(MusicItem music) async {
+    playQueue.removeWhere((m) => m.path == music.path);
 
     int insertIdx = 0;
     if (selectedMusic != null) {
       final currentIdx = playQueue.indexWhere(
-        (m) => m.path == selectedMusic!.path,
+        (m) => m.id == selectedMusic!.id,
       );
       if (currentIdx != -1) {
         insertIdx = currentIdx;
       }
     }
 
-    final newFile = MusicFile.from(music);
-    playQueue.insert(insertIdx, newFile);
+    final newItem = MusicItem.from(music);
+    playQueue.insert(insertIdx, newItem);
     notifyListeners();
-    await play(newFile);
+    await play(newItem);
   }
 
   /// 指定した曲をキューの「次」に挿入（または移動）する
-  void addNext(MusicFile music) {
-    final index = playQueue.indexWhere((m) => m.path == music.path);
-    if (index != -1) {
-      playQueue.removeAt(index);
-    }
+  void addNext(MusicItem music) {
+    playQueue.removeWhere((m) => m.path == music.path);
 
     int insertIdx = 0;
     if (selectedMusic != null) {
       final currentIdx = playQueue.indexWhere(
-        (m) => m.path == selectedMusic!.path,
+        (m) => m.id == selectedMusic!.id,
       );
       if (currentIdx != -1) {
         insertIdx = currentIdx + 1;
       }
     }
 
-    final newFile = MusicFile.from(music);
-    playQueue.insert(insertIdx.clamp(0, playQueue.length), newFile);
+    final newItem = MusicItem.from(music);
+    playQueue.insert(insertIdx.clamp(0, playQueue.length), newItem);
     notifyListeners();
   }
 
@@ -203,7 +196,7 @@ class MusicPlayerController extends ChangeNotifier {
     notifyListeners();
 
     try {
-      List<MusicFile> musicfiles = await AudioFileService.loadMusicFiles(
+      List<MusicItem> musicfiles = await AudioFileService.loadMusicFiles(
         libraryTypeFilter: sessionType == SessionType.media
             ? LibraryType.media
             : LibraryType.music,
@@ -215,7 +208,7 @@ class MusicPlayerController extends ChangeNotifier {
         return;
       }
 
-      allLoadedFiles = List<MusicFile>.from(musicfiles);
+      allLoadedFiles = List<MusicItem>.from(musicfiles);
 
       // 全体を日付順（新しい順）にソートしておく
       musicfiles.sort(
@@ -252,7 +245,7 @@ class MusicPlayerController extends ChangeNotifier {
       }
       if (configChanged) notifyListeners();
 
-      final Map<String, List<MusicFile>> dirToFiles = {};
+      final Map<String, List<MusicItem>> dirToFiles = {};
       for (final f in musicfiles) {
         final d = p.basename(f.directory);
         dirToFiles.putIfAbsent(d, () => []).add(f);
@@ -280,7 +273,7 @@ class MusicPlayerController extends ChangeNotifier {
 
       if (activeConfigKeys.isEmpty && musicfiles.isNotEmpty) {
         // 設定が全滅している場合は、マッチした全曲をそのまま並べる
-        playQueue = List<MusicFile>.from(musicfiles);
+        playQueue = List<MusicItem>.from(musicfiles);
         return;
       }
 
@@ -288,7 +281,7 @@ class MusicPlayerController extends ChangeNotifier {
         activeConfigKeys,
       ).take(targetCount).toList();
 
-      List<MusicFile> newQueue;
+      List<MusicItem> newQueue;
 
       if (playQueue.isEmpty) {
         newQueue = [];
@@ -298,7 +291,7 @@ class MusicPlayerController extends ChangeNotifier {
         for (final dirName in targetDirs) {
           final files = dirToFiles[dirName] ?? musicfiles;
           int startIdx = dirPoolIndices[dirName] ?? 0;
-          MusicFile? selected;
+          MusicItem? selected;
 
           for (int i = 0; i < files.length; i++) {
             int currentIdx = (startIdx + i) % files.length;
@@ -310,7 +303,7 @@ class MusicPlayerController extends ChangeNotifier {
           }
           // 重複を許容してでも埋める場合（基本的にはフィルタ時はここに来ないように調整済み）
           if (selected == null) selected = files[startIdx % files.length];
-          newQueue.add(MusicFile.from(selected));
+          newQueue.add(MusicItem.from(selected));
           usedPaths.add(selected.path);
         }
       } else {
@@ -318,7 +311,7 @@ class MusicPlayerController extends ChangeNotifier {
         final diffResult = diffutil.calculateListDiff(nowDirs, targetDirs);
         final updates = diffResult.getUpdatesWithData();
 
-        final queue = List<MusicFile>.from(playQueue);
+        final queue = List<MusicItem>.from(playQueue);
         final Set<String> usedPathsInQueue = queue.map((m) => m.path).toSet();
         final Map<String, int> dirPoolIndices = {};
 
@@ -326,7 +319,7 @@ class MusicPlayerController extends ChangeNotifier {
           if (update is diffutil.DataInsert<String>) {
             final dirName = update.data;
             final files = dirToFiles[dirName] ?? musicfiles;
-            MusicFile? selected;
+            MusicItem? selected;
             int startIdx = dirPoolIndices[dirName] ?? 0;
             for (int i = 0; i < files.length; i++) {
               int currentIdx = (startIdx + i) % files.length;
@@ -337,9 +330,9 @@ class MusicPlayerController extends ChangeNotifier {
               }
             }
             if (selected == null) selected = files[startIdx % files.length];
-            final newFile = MusicFile.from(selected);
-            queue.insert(update.position, newFile);
-            usedPathsInQueue.add(newFile.path);
+            final newItem = MusicItem.from(selected);
+            queue.insert(update.position, newItem);
+            usedPathsInQueue.add(newItem.path);
           } else if (update is diffutil.DataRemove<String>) {
             if (queue[update.position] == selectedMusic) continue;
             final removed = queue.removeAt(update.position);
@@ -434,7 +427,8 @@ class MusicPlayerController extends ChangeNotifier {
 
   void playNext() {
     if (playQueue.isEmpty || selectedMusic == null) return;
-    final index = playQueue.indexWhere((m) => m.path == selectedMusic!.path);
+    final index = playQueue.indexWhere((m) => m.id == selectedMusic!.id);
+    if (index == -1) return;
     final nextIndex = (index + 1) % playQueue.length;
     play(playQueue[nextIndex]);
   }
@@ -461,18 +455,18 @@ class MusicPlayerController extends ChangeNotifier {
   }
 
   void moveMusicNext(int index) {
-    final now = playQueue.indexWhere((m) => m.path == selectedMusic?.path);
+    final now = playQueue.indexWhere((m) => m.id == selectedMusic?.id);
     final item = playQueue.removeAt(index);
     playQueue.insert(now + 1, item);
     notifyListeners();
   }
 
-  void removeMusic(MusicFile music) {
-    playQueue.removeWhere((m) => m.path == music.path);
+  void removeMusic(MusicItem music) {
+    playQueue.removeWhere((m) => m.id == music.id);
     notifyListeners();
   }
 
-  Future<void> deleteMusicFile(BuildContext context, MusicFile music) async {
+  Future<void> deleteMusicFile(BuildContext context, MusicItem music) async {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
