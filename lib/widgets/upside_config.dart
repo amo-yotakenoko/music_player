@@ -140,8 +140,16 @@ class _ConfigSetterState extends State<ConfigSetter> {
                       },
                     ),
                     const Divider(),
-                    // for (var item in controller.shuffleConfig.entries)
-                    //   item.value.buildSpinBoxRow(() => setModalState(() {})),
+                    SwitchListTile(
+                      title: const Text('シャッフル'),
+                      subtitle: const Text('再生順をランダムに並び替える'),
+                      value: controller.shuffleAll,
+                      onChanged: (value) {
+                        setModalState(() {
+                          controller.shuffleAll = value;
+                        });
+                      },
+                    ),
                     const SizedBox(height: 20),
                     ElevatedButton(
                       onPressed: () {

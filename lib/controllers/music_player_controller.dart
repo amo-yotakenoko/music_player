@@ -205,6 +205,7 @@ class MusicPlayerController extends ChangeNotifier {
   };
 
   DateTime? filterDate;
+  bool shuffleAll = false;
 
   void setMusicFiles() async {
     print("再ロード開始");
@@ -290,6 +291,7 @@ class MusicPlayerController extends ChangeNotifier {
       if (activeConfigKeys.isEmpty && musicfiles.isNotEmpty) {
         // 設定が全滅している場合は、マッチした全曲をそのまま並べる
         playQueue = List<MusicItem>.from(musicfiles);
+        if (shuffleAll) playQueue.shuffle();
         return;
       }
 
@@ -317,8 +319,10 @@ class MusicPlayerController extends ChangeNotifier {
               break;
             }
           }
-          // 重複を許容してでも埋める場合（基本的にはフィルタ時はここに来ないように調整済み）
-          if (selected == null) selected = files[startIdx % files.length];
+          if (selected == null) {
+            selected = files[startIdx % files.length];
+            dirPoolIndices[dirName] = (startIdx + 1) % files.length;
+          }
           newQueue.add(MusicItem.from(selected));
           usedPaths.add(selected.path);
         }
@@ -345,7 +349,10 @@ class MusicPlayerController extends ChangeNotifier {
                 break;
               }
             }
-            if (selected == null) selected = files[startIdx % files.length];
+            if (selected == null) {
+              selected = files[startIdx % files.length];
+              dirPoolIndices[dirName] = (startIdx + 1) % files.length;
+            }
             final newItem = MusicItem.from(selected);
             queue.insert(update.position, newItem);
             usedPathsInQueue.add(newItem.path);
@@ -362,6 +369,7 @@ class MusicPlayerController extends ChangeNotifier {
       }
 
       playQueue = newQueue;
+      if (shuffleAll) playQueue.shuffle();
     } finally {
       isLoading = false;
       notifyListeners();
