@@ -9,6 +9,7 @@ class SideUI extends StatelessWidget {
 
   void mix_update() {
     print("更新");
+    controller.clearFiles();
     controller.setMusicFiles();
   }
 

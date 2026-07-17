@@ -1,7 +1,7 @@
 import 'dart:async';
 import 'dart:io';
+import 'dart:math';
 import 'package:flutter/material.dart';
-import 'package:just_audio/just_audio.dart';
 import 'package:path/path.dart' as p;
 import '../classes/music.dart';
 import '../services/audio_file_service.dart';
@@ -94,18 +94,26 @@ class MusicPlayerController extends ChangeNotifier {
     // サービスからの通知（isPlayingの切り替えなど）を全体に通知
     _playbackService.addListener(notifyListeners);
 
-    // プレイヤー本体の完了イベント
-    _playbackService.player.processingStateStream.listen((state) {
-      if (_playbackService.playingType == sessionType &&
-          state == ProcessingState.completed) {
-        playNext();
-      }
-    });
+    // 完了イベントは PlaybackService → MusicHandler 経由で受け取る
+    if (sessionType == SessionType.music) {
+      _playbackService.onMusicNext = playNext;
+      _playbackService.onMusicAddRandomNext = _addRandomFromDirBOrC;
+    } else {
+      _playbackService.onMediaNext = playNext;
+      _playbackService.onMediaAddRandomNext = _addRandomFromDirBOrC;
+    }
   }
 
   @override
   void dispose() {
     _playbackService.removeListener(notifyListeners);
+    if (sessionType == SessionType.music) {
+      _playbackService.onMusicNext = null;
+      _playbackService.onMusicAddRandomNext = null;
+    } else {
+      _playbackService.onMediaNext = null;
+      _playbackService.onMediaAddRandomNext = null;
+    }
     _serviceSub?.cancel();
     super.dispose();
   }
@@ -142,9 +150,7 @@ class MusicPlayerController extends ChangeNotifier {
 
     int insertIdx = 0;
     if (selectedMusic != null) {
-      final currentIdx = playQueue.indexWhere(
-        (m) => m.id == selectedMusic!.id,
-      );
+      final currentIdx = playQueue.indexWhere((m) => m.id == selectedMusic!.id);
       if (currentIdx != -1) {
         insertIdx = currentIdx;
       }
@@ -162,9 +168,7 @@ class MusicPlayerController extends ChangeNotifier {
 
     int insertIdx = 0;
     if (selectedMusic != null) {
-      final currentIdx = playQueue.indexWhere(
-        (m) => m.id == selectedMusic!.id,
-      );
+      final currentIdx = playQueue.indexWhere((m) => m.id == selectedMusic!.id);
       if (currentIdx != -1) {
         insertIdx = currentIdx + 1;
       }
@@ -173,6 +177,18 @@ class MusicPlayerController extends ChangeNotifier {
     final newItem = MusicItem.from(music);
     playQueue.insert(insertIdx.clamp(0, playQueue.length), newItem);
     notifyListeners();
+  }
+
+  /// 3回押し時に呼ばれる。ディレクトリBまたはCの曲をランダムに1つ選び、
+  /// 現在の曲の次に addNext で差し込む。
+  void _addRandomFromDirBOrC() {
+    final candidates = allLoadedFiles.where((m) {
+      final dir = p.basename(m.directory);
+      return dir == 'B' || dir == 'C';
+    }).toList();
+    if (candidates.isEmpty) return;
+    final chosen = candidates[Random().nextInt(candidates.length)];
+    addNext(chosen);
   }
 
   Future<void> setPlaybackSpeed(double speed) async {

@@ -6,7 +6,7 @@ import 'package:audiotags/audiotags.dart';
 import 'package:ffmpeg_kit_flutter_new/ffmpeg_kit.dart';
 import 'package:ffmpeg_kit_flutter_new/return_code.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:just_audio_background/just_audio_background.dart';
+import 'package:audio_service/audio_service.dart';
 
 class MusicItem {
   final String id;

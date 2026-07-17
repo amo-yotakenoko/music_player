@@ -1,9 +1,10 @@
 import 'dart:async';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:just_audio/just_audio.dart';
 import '../classes/music.dart';
+import 'music_handler.dart';
 
-/// プレイヤーの状態を保持するためのクラス
 class PlaybackSession {
   MusicItem? selectedMusic;
   final ValueNotifier<Duration> position = ValueNotifier(Duration.zero);
@@ -18,31 +19,22 @@ class PlaybackSession {
 
 enum SessionType { music, media }
 
-/// 【サービス層】
-/// アプリ全体の「音の再生」を一手に引き受ける司令塔。
 class PlaybackService extends ChangeNotifier {
   static final PlaybackService _instance = PlaybackService._internal();
   factory PlaybackService() => _instance;
   PlaybackService._internal() {
-    _init();
+    _connectHandler();
   }
 
-  final AudioPlayer _audioPlayer = AudioPlayer();
-
-  // セッションごとの状態管理
   final Map<SessionType, PlaybackSession> _sessions = {
     SessionType.music: PlaybackSession(),
     SessionType.media: PlaybackSession(),
   };
 
-  // UI上でどちらのタブを選択しているか
   SessionType _activeType = SessionType.music;
-  // 実際にプレイヤーがどちらのタイプを再生しているか
   SessionType _playingType = SessionType.music;
-  // 遷移中フラグ
   bool _isTransitioning = false;
 
-  // 外部公開用のゲッター
   SessionType get activeType => _activeType;
   SessionType get playingType => _playingType;
 
@@ -50,39 +42,69 @@ class PlaybackService extends ChangeNotifier {
   PlaybackSession get playingSession => _sessions[_playingType]!;
 
   PlaybackSession getSession(SessionType type) => _sessions[type]!;
-  AudioPlayer get player => _audioPlayer;
 
-  void _init() {
-    _audioPlayer.positionStream.listen((p) {
+  AudioPlayer get player => MusicHandler.instance.player;
+
+  VoidCallback? onMusicNext;
+  VoidCallback? onMediaNext;
+
+  VoidCallback? onMusicAddRandomNext;
+  VoidCallback? onMediaAddRandomNext;
+
+  void _connectHandler() {
+    final handler = MusicHandler.instance;
+
+    handler.onPosition = (p) {
       if (_isTransitioning) return;
       playingSession.position.value = p;
-    });
-    _audioPlayer.durationStream.listen((d) {
-      if (d == null) return;
+    };
+
+    handler.onDuration = (d) {
       playingSession.duration.value = d;
-    });
-    _audioPlayer.playerStateStream.listen((state) {
+    };
+
+    handler.onPlayerState = (state) {
       if (_isTransitioning) return;
       playingSession.isPlaying = state.playing;
 
-      // 再生が止まった（ポーズされた）タイミングで進捗を保存
       if (!state.playing && playingSession.selectedMusic != null) {
         saveProgress();
       }
 
       notifyListeners();
-    });
-    _audioPlayer.speedStream.listen((speed) {
-      playingSession.playbackSpeed = speed;
-    });
+    };
+
+    handler.onCompleted = () {
+      if (_playingType == SessionType.music) {
+        onMusicNext?.call();
+      } else {
+        onMediaNext?.call();
+      }
+    };
+
+    handler.onSkipNext = () {
+      if (_playingType == SessionType.music) {
+        onMusicNext?.call();
+      } else {
+        onMediaNext?.call();
+      }
+    };
+
+    handler.onAddRandomNext = () {
+      if (_playingType == SessionType.music) {
+        onMusicAddRandomNext?.call();
+      } else {
+        onMediaAddRandomNext?.call();
+      }
+    };
   }
 
   Future<void> saveProgress() {
     if (playingSession.selectedMusic != null) {
       if (playingSession.selectedMusic?.directory.contains("配信") == true) {
         return playingSession.selectedMusic!.saveProgress(
-          _audioPlayer.position,
-          totalDuration: _audioPlayer.duration,
+          MusicHandler.instance.player.position,
+          totalDuration: MusicHandler.instance.player.duration,
         );
       }
     }
@@ -90,7 +112,6 @@ class PlaybackService extends ChangeNotifier {
     return Future.value();
   }
 
-  /// セッションを切り替える
   Future<void> switchSession(SessionType newType) async {
     if (_activeType == newType) return;
 
@@ -99,7 +120,7 @@ class PlaybackService extends ChangeNotifier {
     final targetSession = _sessions[newType]!;
 
     if (targetSession.selectedMusic != null && targetSession.isPlaying) {
-      if (_playingType == newType && _audioPlayer.playing) {
+      if (_playingType == newType && MusicHandler.instance.player.playing) {
         notifyListeners();
         return;
       }
@@ -109,9 +130,7 @@ class PlaybackService extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// 曲を再生する
   Future<void> play(SessionType type, MusicItem music) async {
-    // 現在の曲の進捗を保存してから切り替える
     if (playingSession.selectedMusic != null) {
       await saveProgress();
     }
@@ -120,7 +139,6 @@ class PlaybackService extends ChangeNotifier {
     session.selectedMusic = music;
     session.isPlaying = true;
 
-    // 保存されていた進捗を読み込む
     final savedPosition = await music.loadProgress();
     session.position.value = savedPosition;
 
@@ -134,39 +152,41 @@ class PlaybackService extends ChangeNotifier {
 
     _isTransitioning = true;
     try {
-      await _audioPlayer.stop();
+      final handler = MusicHandler.instance;
+      await handler.stop();
 
       _playingType = type;
-      // 読み込み開始時に時間をリセット（位置指定がある場合は後で上書きされる）
       session.duration.value = Duration.zero;
 
       await music.loadVolumeFromCache();
-      await _audioPlayer.setVolume(
+      await handler.setVolume(
         music.integratedLoudness != null ? music.adjustedVolume : 0.8,
       );
 
-      // Musicセッションの場合は倍速再生を1.0に固定、Mediaセッションの場合は設定値を適用
       final effectiveSpeed = (type == SessionType.music)
           ? 1.0
           : session.playbackSpeed;
-      await _audioPlayer.setSpeed(effectiveSpeed);
+      await handler.setSpeed(effectiveSpeed);
 
       final source = AudioSource.uri(
         Uri.file(music.path),
         tag: music.toMediaItem(),
       );
 
+      handler.updateNowPlaying(music);
+
       Duration initialPosition = session.position.value;
       if (session.duration.value - initialPosition < Duration(seconds: 10)) {
         initialPosition -= Duration(seconds: 10);
       }
-      await _audioPlayer.setAudioSource(
-        source,
+
+      await handler.load(
+        source: source,
         initialPosition: initialPosition,
       );
 
       if (session.isPlaying) {
-        _audioPlayer.play();
+        await handler.playFromApp();
       }
     } catch (e) {
       print("Playback Error: $e");
@@ -176,19 +196,19 @@ class PlaybackService extends ChangeNotifier {
   }
 
   Future<void> togglePlayPause() async {
-    if (_audioPlayer.playing) {
+    final handler = MusicHandler.instance;
+    if (handler.player.playing) {
       if (playingSession.selectedMusic != null) {
         await saveProgress();
       }
-      await _audioPlayer.pause();
+      await handler.pauseFromApp();
     } else {
-      await _audioPlayer.play();
+      await handler.playFromApp();
     }
   }
 
   Future<void> seek(Duration pos) async {
-    await _audioPlayer.seek(pos);
-    // シーク後も保存しておく
+    await MusicHandler.instance.player.seek(pos);
     if (playingSession.selectedMusic != null) {
       saveProgress();
     }
@@ -196,9 +216,8 @@ class PlaybackService extends ChangeNotifier {
 
   Future<void> setSpeed(double speed) async {
     playingSession.playbackSpeed = speed;
-    // 再生中のセッションがMusicの場合は常に1.0、Mediaの場合は指定速度を適用
     final effectiveSpeed = (_playingType == SessionType.music) ? 1.0 : speed;
-    await _audioPlayer.setSpeed(effectiveSpeed);
+    await MusicHandler.instance.setSpeed(effectiveSpeed);
     notifyListeners();
   }
 }

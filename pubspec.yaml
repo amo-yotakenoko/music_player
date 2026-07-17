@@ -37,7 +37,7 @@ dependencies:
   path_provider: ^2.1.5
   permission_handler: ^12.0.1
   just_audio: ^0.9.44
-  just_audio_background: ^0.0.1-beta.15
+  audio_service: ^0.18.13
   flutter_spinbox: ^0.13.1
   diffutil_dart: ^4.0.1
   path: ^1.9.1
