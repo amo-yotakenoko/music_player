@@ -207,7 +207,7 @@ class MusicPlayerController extends ChangeNotifier {
   DateTime? filterDate;
   bool shuffleAll = false;
 
-  void setMusicFiles() async {
+  Future<void> setMusicFiles() async {
     print("再ロード開始");
     isLoading = true;
     notifyListeners();
@@ -449,10 +449,21 @@ class MusicPlayerController extends ChangeNotifier {
     await _playbackService.seek(targetPosition);
   }
 
-  void playNext() {
-    if (playQueue.isEmpty || selectedMusic == null) return;
+  Future<void> playNext() async {
+    if (playQueue.isEmpty) {
+      clearFiles();
+      await setMusicFiles();
+      if (playQueue.isEmpty) return;
+    }
+    if (selectedMusic == null) {
+      if (playQueue.isNotEmpty) play(playQueue[0]);
+      return;
+    }
     final index = playQueue.indexWhere((m) => m.id == selectedMusic!.id);
-    if (index == -1) return;
+    if (index == -1) {
+      if (playQueue.isNotEmpty) play(playQueue[0]);
+      return;
+    }
     final nextIndex = (index + 1) % playQueue.length;
     play(playQueue[nextIndex]);
   }

@@ -11,7 +11,7 @@ class MusicHandler extends BaseAudioHandler {
   static MusicHandler? _instance;
   static MusicHandler get instance => _instance!;
 
-  final AudioPlayer player = AudioPlayer();
+  AudioPlayer player = AudioPlayer();
 
   VoidCallback? onCompleted;
   ValueChanged<Duration>? onPosition;
@@ -29,20 +29,32 @@ class MusicHandler extends BaseAudioHandler {
   Stream<DeviceButtonEvent> get deviceButtonStream => _deviceButtonCtl.stream;
 
   late final DeviceButton _deviceButton;
+  StreamSubscription<Duration>? _positionSub;
+  StreamSubscription<Duration?>? _durationSub;
+  StreamSubscription<PlayerState>? _playerStateSub;
+  StreamSubscription<ProcessingState>? _processingStateSub;
 
   MusicHandler() {
     _instance = this;
     _deviceButton = DeviceButton(this);
     _deviceButton.start();
+    _setupListeners();
+  }
 
-    player.positionStream.listen((p) {
+  void _setupListeners() {
+    _positionSub?.cancel();
+    _durationSub?.cancel();
+    _playerStateSub?.cancel();
+    _processingStateSub?.cancel();
+
+    _positionSub = player.positionStream.listen((p) {
       playbackState.add(playbackState.value.copyWith(
         updatePosition: p,
       ));
       onPosition?.call(p);
     });
 
-    player.durationStream.listen((d) {
+    _durationSub = player.durationStream.listen((d) {
       if (d == null) return;
       mediaItem.add(mediaItem.value?.copyWith(
         duration: d,
@@ -50,7 +62,7 @@ class MusicHandler extends BaseAudioHandler {
       onDuration?.call(d);
     });
 
-    player.playerStateStream.listen((state) {
+    _playerStateSub = player.playerStateStream.listen((state) {
       playbackState.add(playbackState.value.copyWith(
         playing: state.playing,
         processingState: state.processingState == ProcessingState.ready
@@ -64,11 +76,17 @@ class MusicHandler extends BaseAudioHandler {
       onPlayerState?.call(state);
     });
 
-    player.processingStateStream.listen((state) {
+    _processingStateSub = player.processingStateStream.listen((state) {
       if (state == ProcessingState.completed) {
         onCompleted?.call();
       }
     });
+  }
+
+  Future<void> recover() async {
+    await player.dispose();
+    player = AudioPlayer();
+    _setupListeners();
   }
 
   /// システム（イヤホンボタン / ロック画面）から呼ばれる。

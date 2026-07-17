@@ -34,6 +34,9 @@ class PlaybackService extends ChangeNotifier {
   SessionType _activeType = SessionType.music;
   SessionType _playingType = SessionType.music;
   bool _isTransitioning = false;
+  bool _isPlaying = false;
+  MusicItem? _pendingPlayMusic;
+  String? _lastCompletedTrackId;
 
   SessionType get activeType => _activeType;
   SessionType get playingType => _playingType;
@@ -55,8 +58,8 @@ class PlaybackService extends ChangeNotifier {
     final handler = MusicHandler.instance;
 
     handler.onPosition = (p) {
-      if (_isTransitioning) return;
       playingSession.position.value = p;
+      _checkTrackCompletion(p);
     };
 
     handler.onDuration = (d) {
@@ -74,13 +77,7 @@ class PlaybackService extends ChangeNotifier {
       notifyListeners();
     };
 
-    handler.onCompleted = () {
-      if (_playingType == SessionType.music) {
-        onMusicNext?.call();
-      } else {
-        onMediaNext?.call();
-      }
-    };
+    handler.onCompleted = () => _onTrackCompleted();
 
     handler.onSkipNext = () {
       if (_playingType == SessionType.music) {
@@ -97,6 +94,27 @@ class PlaybackService extends ChangeNotifier {
         onMediaAddRandomNext?.call();
       }
     };
+  }
+
+  void _checkTrackCompletion(Duration position) {
+    final dur = playingSession.duration.value;
+    final music = playingSession.selectedMusic;
+    if (music == null) return;
+    if (_lastCompletedTrackId == music.id) return;
+    if (dur <= Duration.zero || !playingSession.isPlaying) return;
+    if (dur - position > const Duration(milliseconds: 500)) return;
+    _onTrackCompleted();
+  }
+
+  void _onTrackCompleted() {
+    final music = playingSession.selectedMusic;
+    if (music == null) return;
+    _lastCompletedTrackId = music.id;
+    if (_playingType == SessionType.music) {
+      onMusicNext?.call();
+    } else {
+      onMediaNext?.call();
+    }
   }
 
   Future<void> saveProgress() {
@@ -131,19 +149,48 @@ class PlaybackService extends ChangeNotifier {
   }
 
   Future<void> play(SessionType type, MusicItem music) async {
-    if (playingSession.selectedMusic != null) {
-      await saveProgress();
+    if (_isPlaying) {
+      _pendingPlayMusic = music;
+      return;
     }
+    _isPlaying = true;
+    _pendingPlayMusic = null;
+    try {
+      if (playingSession.selectedMusic != null) {
+        await saveProgress();
+      }
 
-    final session = _sessions[type]!;
-    session.selectedMusic = music;
-    session.isPlaying = true;
+      final session = _sessions[type]!;
+      session.selectedMusic = music;
+      session.isPlaying = true;
+      _lastCompletedTrackId = null;
+      session.position.value = Duration.zero;
+      session.duration.value = Duration.zero;
+      notifyListeners();
 
-    final savedPosition = await music.loadProgress();
-    session.position.value = savedPosition;
+      final savedPosition = await music.loadProgress();
+      final savedDuration = await music.loadTotalDuration();
+      session.position.value = savedPosition;
 
-    await _loadAndPlay(type, session);
-    notifyListeners();
+      if (savedDuration != null &&
+          savedDuration > Duration.zero &&
+          savedPosition > Duration.zero &&
+          savedDuration - savedPosition < const Duration(seconds: 10)) {
+        final rewound = savedPosition - const Duration(seconds: 10);
+        session.position.value =
+            rewound < Duration.zero ? Duration.zero : rewound;
+      }
+
+      await _loadAndPlay(type, session);
+      notifyListeners();
+    } finally {
+      _isPlaying = false;
+      final pending = _pendingPlayMusic;
+      _pendingPlayMusic = null;
+      if (pending != null) {
+        play(type, pending);
+      }
+    }
   }
 
   Future<void> _loadAndPlay(SessionType type, PlaybackSession session) async {
@@ -151,8 +198,9 @@ class PlaybackService extends ChangeNotifier {
     if (music == null) return;
 
     _isTransitioning = true;
+    final handler = MusicHandler.instance;
+    final initialPos = session.position.value;
     try {
-      final handler = MusicHandler.instance;
       await handler.stop();
 
       _playingType = type;
@@ -175,14 +223,9 @@ class PlaybackService extends ChangeNotifier {
 
       handler.updateNowPlaying(music);
 
-      Duration initialPosition = session.position.value;
-      if (session.duration.value - initialPosition < Duration(seconds: 10)) {
-        initialPosition -= Duration(seconds: 10);
-      }
-
       await handler.load(
         source: source,
-        initialPosition: initialPosition,
+        initialPosition: initialPos,
       );
 
       if (session.isPlaying) {
@@ -190,6 +233,8 @@ class PlaybackService extends ChangeNotifier {
       }
     } catch (e) {
       print("Playback Error: $e");
+      try { await handler.player.stop(); } catch (_) {}
+      await handler.recover();
     } finally {
       _isTransitioning = false;
     }
